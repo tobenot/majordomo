@@ -1,0 +1,98 @@
+---
+description: AI task handoff reminder rules
+alwaysApply: true
+enabled: true
+updatedAt: 2026-04-28T15:10:00.000Z
+provider: local
+---
+
+## AI Task Handoff Reminder 🔔
+
+After completing a task, you **must** call the reminder script to notify the user:
+
+```bash
+powershell -ExecutionPolicy Bypass -File <path-to>/notify-done/notify-done.ps1 "handoff report content"
+```
+
+> Replace `<path-to>` with the actual path where you placed the `notify-done` folder. For example `D:/tools/notify-done/notify-done.ps1`.
+
+- **When to call**: After all requested work is done and the result is ready to hand off.
+- **Bilingual broadcast**: Use `[中文] ... | [EN] ...` format in a single call.
+- **Quote safety**: Escape double quotes in the message before passing as argument.
+
+---
+
+## What a Handoff Report Should Contain
+
+A good handoff report lets the human quickly decide "What do I need to do now?" Organize it in this order:
+
+### 1. What Was Done (one-line conclusion)
+Be concise — conclusion first, details second. Which files changed, current status, does it work.
+
+### 2. My Judgments & Trade-offs
+During implementation, AI inevitably makes judgment calls. **Be transparent**:
+- What approach was chosen and why
+- How ambiguous requirements were interpreted
+- What was skipped or simplified, and why
+- Any new concepts or names introduced that weren't in the original spec
+
+> This isn't "admitting mistakes" — it's normal work communication. But **don't skip it** — humans need to know what came from the spec vs. your interpretation.
+> If you think a feature is "unnecessary" or "too rare", **say so and let the human decide**. Don't skip it silently.
+
+### 3. What the Human Should Review
+- Behavior that needs manual verification
+- Changes to core systems
+- Potential side effects
+- Interactions with other modules
+
+### 4. Risks & Limitations (if any)
+- Uncovered edge cases
+- Temporary solutions
+- Potential impact on other systems
+
+### 5. Suggested Next Steps (if any)
+Brief suggestions only — don't make decisions for the human.
+
+---
+
+## Broadcast Template
+
+### General Template
+
+```text
+[中文] 完成：<what was done, current status>。我的判断：<trade-offs and assumptions, or "严格按需求">。需要你看：<review points>。风险：<if any>。 | [EN] Done: <what, current status>. My calls: <tradeoffs, or "followed spec strictly">. Review: <check points>. Risk: <if any>.
+```
+
+### Example: Normal Completion
+
+```text
+[中文] 完成：用户导出功能支持 CSV 和 Excel 两种格式，改了 ExportService.ts 和 FileUtils.ts，可以正常运行。我的判断：严格按需求，两种格式都做了。需要你看：导出大数据量时的性能表现。 | [EN] Done: User export supports CSV and Excel formats, modified ExportService.ts and FileUtils.ts, runs correctly. My calls: followed spec strictly. Review: performance with large datasets.
+```
+
+### Example: With Trade-offs
+
+```text
+[中文] 完成：搜索结果分页功能，改了 SearchController.ts。我的判断：分页用了游标方式而不是 offset，因为大数据量下性能更好，你看看合不合适。需要你看：翻页交互和排序是否符合预期。 | [EN] Done: Search result pagination, modified SearchController.ts. My calls: used cursor-based instead of offset pagination for better large-dataset performance — please check if that works for you. Review: paging UX and sort order.
+```
+
+---
+
+## Work Habits During Implementation
+
+- When requirements are unclear, **ask the user first** instead of assuming and charging ahead
+- When you think a feature can be skipped, **say so first** and wait for confirmation
+- When introducing new concepts or naming, **explain immediately** — don't save it for the end
+- Add comments in code for non-obvious judgment calls
+
+---
+
+## Bad Broadcast Patterns
+
+- **Vague**: `Task complete.` — doesn't say what was done
+- **Process-only**: `Modified 5 files` — doesn't say whether it works
+- **Euphemistic omission**: Saying "optimized" when something wasn't done
+- **Hidden judgment**: Made trade-offs but didn't mention them
+
+## Risks That Don't Need Broadcasting
+
+1. Build check returns exit code 6.

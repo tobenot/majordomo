@@ -1,0 +1,98 @@
+---
+description: AI工作完成后的交接提醒规则
+alwaysApply: true
+enabled: true
+updatedAt: 2026-04-28T14:44:00.000Z
+provider: local
+---
+
+[English version → remind-en.mdc](remind-en.mdc)
+
+## AI 工作交接提醒 🔔
+
+任务完成后**必须**调用提醒脚本通知用户：
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools/notify-done/notify-done.ps1 "交接报告内容"
+```
+
+- **调用时机**：所有请求完成后，结果可交付时调用。
+- **双播报**：`[中文] ... | [EN] ...` 格式，一次调用。
+- **引号安全**：消息中的双引号先转义再传参。
+
+---
+
+## 交接报告应包含的内容
+
+一份好的交接报告让人类快速判断"我现在需要做什么"。按以下顺序组织：
+
+### 1. 做了什么（一句话结论）
+简明扼要，先说结论，后说细节。改了哪些文件，当前什么状态，能不能用。
+
+### 2. 我的判断与取舍
+实现过程中，AI 不可避免会做一些判断。**如实交代**就好：
+- 选了什么方案、为什么选它
+- 需求不明确的地方，我是怎么假设的
+- 如果跳过或简化了什么，说一下原因
+- 如果引入了需求里没提到的概念或命名，说一下为什么
+
+> 这不是"认错"，而是正常的工作沟通。但**不能省略**——人类需要知道哪些是需求原文，哪些是你的理解。
+> 如果实现过程中觉得某个功能"没必要做"或"太少见"，**先说出来让人类决定**，不要自己跳过。
+
+### 3. 需要人类看的地方
+- 需要手动验证的行为
+- 涉及核心系统的改动
+- 可能有副作用的地方
+- 与其他模块的交互
+
+### 4. 风险与限制（如有）
+- 未覆盖的边界情况
+- 临时方案
+- 对其他系统的潜在影响
+
+### 5. 建议下一步（如有）
+简短建议即可，不要替人类做决定。
+
+---
+
+## 播报模板
+
+### 通用模板
+
+```text
+[中文] 完成：<做了什么，当前状态>。我的判断：<取舍和假设，没有就写"严格按需求">。需要你看：<审查点>。风险：<如有>。 | [EN] Done: <what, current status>. My calls: <tradeoffs, or "followed spec strictly">. Review: <check points>. Risk: <if any>.
+```
+
+### 示例：正常完成
+
+```text
+[中文] 完成：用户导出功能支持 CSV 和 Excel 两种格式，改了 ExportService.ts 和 FileUtils.ts，可以正常运行。我的判断：严格按需求，两种格式都做了。需要你看：导出大数据量时的性能表现。 | [EN] Done: User export supports CSV and Excel formats, modified ExportService.ts and FileUtils.ts, runs correctly. My calls: followed spec strictly. Review: performance with large datasets.
+```
+
+### 示例：有取舍时
+
+```text
+[中文] 完成：搜索结果分页功能，改了 SearchController.ts。我的判断：分页用了游标方式而不是 offset，因为大数据量下性能更好，你看看合不合适。需要你看：翻页交互和排序是否符合预期。 | [EN] Done: Search result pagination, modified SearchController.ts. My calls: used cursor-based instead of offset pagination for better large-dataset performance — please check if that works for you. Review: paging UX and sort order.
+```
+
+---
+
+## 工作过程中的习惯
+
+- 遇到需求不明确时，**优先问用户**，而不是自己假设后闷头做
+- 觉得某个功能可以不做时，**先说出来**，等人确认
+- 自创概念或命名时，**当场说明**，不要攒到最后
+- 在代码中对非显而易见的判断加注释说明理由
+
+---
+
+## 不好的播报方式
+
+- **空泛**：`任务完成。` —— 没说做了什么
+- **只报过程**：`修改了5个文件` —— 没说结果能不能用
+- **美化省略**：把"没做"说成"已优化" 
+- **隐藏判断**：做了取舍却不提
+
+## 不用播报的风险情况
+
+1. 编译检查返回 exit code 6。
