@@ -141,3 +141,15 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# --- majordomo runtime data & local config ---
+# 运行时数据（会话库/日记/历史/缓存），全局态在 ~/.majordomo，项目态在 .commander
+.commander/
+.majordomo/
+data/
+*.db
+*.sqlite
+
+# 真实配置（profile 模板用 .example 提交，真实 config 不进库）
+config.jsonc
+config.json

@@ -1,0 +1,51 @@
+{
+  "name": "majordomo",
+  "version": "0.1.0",
+  "description": "A persona-driven, multi-session orchestrator for Claude Code. Headless workers, a character frontend, TUI + Web panel.",
+  "license": "AGPL-3.0",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "bin": {
+    "commander": "dist/cli.js",
+    "majordomo": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src/web/public",
+    "tools/notify-done",
+    "config.example.jsonc",
+    ".env.example",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/copy-assets.js",
+    "dev": "tsc -w",
+    "start": "node dist/cli.js",
+    "daemon": "node dist/cli.js daemon",
+    "web": "node dist/cli.js web",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "agent-sdk",
+    "ai-orchestration",
+    "typescript",
+    "tui",
+    "cli",
+    "headless",
+    "multi-agent"
+  ],
+  "dependencies": {
+    "commander": "^12.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.5.0"
+  }
+}

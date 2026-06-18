@@ -1,0 +1,59 @@
+// majordomo 配置示例。复制为 config.jsonc 后修改（config.jsonc 不进版本库）。
+// 全局配置优先从 ~/.majordomo/config.jsonc 读取，其次是项目根目录 ./config.jsonc。
+{
+  // ── 网络 ──────────────────────────────────────────────
+  // core daemon 监听地址。初期只听 localhost；未来远程接入再改 host/加 TLS。
+  "host": "127.0.0.1",
+  "port": 4317,
+
+  // ── Profile：claude / claude-internal / tclaude 一键切换 ──
+  // 关键坑：内网版个人规则目录是 .claude-internal（它自己会说成 .claude，那是错的）。
+  // 切换 activeProfile 只影响"新开"的 session，已跑的不动。
+  "activeProfile": "home",
+  "profiles": {
+    "home": {
+      "command": "claude",
+      "personalDir": "~/.claude"
+    },
+    "internal": {
+      "command": "claude-internal",
+      "personalDir": "~/.claude-internal"
+    },
+    "tclaude": {
+      "command": "tclaude",
+      "personalDir": "~/.tclaude"
+    }
+  },
+
+  // 工作层权限模式：auto 行为最省心，高危操作再让指挥官拦下来问你。
+  "permissionMode": "auto",
+
+  // ── 工作层 worker ───────────────────────────────────────
+  // engine: "auto" | "claude" | "mock"
+  //   auto  → 能用真 Claude Code 就用，否则降级 mock（开箱即跑）
+  //   claude→ 强制走 Agent SDK / claude CLI（需已安装并登录）
+  //   mock  → 回显引擎，无需任何凭证，用于演示整条链路
+  "worker": {
+    "engine": "auto"
+  },
+
+  // ── 人设层 persona ──────────────────────────────────────
+  // mode: "auto" | "api" | "template"
+  //   auto    → 有 API key 走 api，否则走离线模板
+  //   api     → OpenAI-compatible / Anthropic 兼容接口（密钥放 .env）
+  //   template→ 离线模板，无需密钥
+  // 具体密钥/base/model 放 .env，不写进配置文件。
+  "persona": {
+    "mode": "auto",
+    "name": "指挥官",
+    "style": "cat-girl-maid"
+  },
+
+  // ── 通知 notifier（可插拔，按顺序全部触发）────────────────
+  // powershell：复用第二代 tools/notify-done 脚本（提示音/浮窗/TTS/日记）
+  // console：跨平台降级，仅打印
+  "notifiers": ["powershell", "console"],
+
+  // 日记目录（相对项目根）。沿用第二代习惯。
+  "diaryDir": ".codebuddy/memory"
+}

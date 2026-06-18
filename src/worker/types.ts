@@ -1,0 +1,56 @@
+import { EventEmitter } from "events";
+
+/** 工作层向上抛出的结构化事件。 */
+export type WorkerEvent =
+  | { kind: "session_id"; id: string }
+  | { kind: "text"; text: string }
+  | { kind: "permission"; requestId: string; tool: string; detail: string }
+  /** 一个回合结束（工作层把控制权交回） */
+  | { kind: "done"; summary?: string }
+  | { kind: "error"; message: string };
+
+export interface WorkerStartOptions {
+  /** 绑定的项目路径 */
+  cwd: string;
+  /** profile 命令，如 claude / claude-internal / tclaude */
+  command: string;
+  /** 权限模式 */
+  permissionMode: string;
+  /** 续接的底层 session_id（如果是 resume） */
+  resumeId?: string;
+}
+
+/**
+ * 工作层引擎接口。一个实例驱动一个连续会话。
+ * 实现：MockWorker（回显，无需凭证）、ClaudeCodeWorker（真 Claude Code）。
+ */
+export abstract class WorkerEngine extends EventEmitter {
+  abstract readonly engineName: string;
+  protected workerSessionId?: string;
+
+  constructor(protected opts: WorkerStartOptions) {
+    super();
+    this.workerSessionId = opts.resumeId;
+  }
+
+  get sessionId(): string | undefined {
+    return this.workerSessionId;
+  }
+
+  /** 投递一轮用户输入，工作层开始干活。 */
+  abstract send(text: string): Promise<void>;
+
+  /** 回应一个权限请求。 */
+  abstract resolvePermission(requestId: string, approve: boolean): void;
+
+  /** 关闭会话，释放资源。 */
+  abstract close(): Promise<void>;
+
+  protected emitEvent(ev: WorkerEvent): void {
+    this.emit("event", ev);
+  }
+
+  onEvent(cb: (ev: WorkerEvent) => void): void {
+    this.on("event", cb);
+  }
+}

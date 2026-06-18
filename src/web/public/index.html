@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>majordomo · 指挥官</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="logo">⌘</span>
+        <span class="title">majordomo</span>
+        <span class="subtitle" id="personaName">指挥官</span>
+      </div>
+      <div class="status">
+        <span id="connState" class="badge off">未连接</span>
+        <label class="profile">
+          profile:
+          <select id="profileSelect"></select>
+        </label>
+        <span id="engineBadge" class="badge"></span>
+      </div>
+    </header>
+
+    <main>
+      <aside id="sidebar">
+        <div class="sidebar-head">
+          <span>会话</span>
+          <button id="newBtn" title="新建会话">＋</button>
+        </div>
+        <ul id="sessionList"></ul>
+        <div class="cg-frame" title="立绘 / CG 占位（后续迭代）">
+          <div class="cg-placeholder">立绘 / CG<br /><small>后续迭代</small></div>
+        </div>
+      </aside>
+
+      <section id="conversation">
+        <div id="messages"></div>
+        <div id="permission" class="permission hidden">
+          <span id="permText"></span>
+          <button id="approveBtn" class="ok">批准</button>
+          <button id="denyBtn" class="no">拒绝</button>
+        </div>
+        <form id="inputForm">
+          <input
+            id="input"
+            type="text"
+            autocomplete="off"
+            placeholder="输入指令，回车发送（无会话时自动新建）…"
+          />
+          <button type="submit">发送</button>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      window.__WS_URL__ = "__WS_URL__";
+    </script>
+    <script src="app.js"></script>
+  </body>
+</html>

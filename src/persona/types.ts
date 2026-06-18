@@ -1,0 +1,20 @@
+/**
+ * 人设层（指挥官的"嘴"）。
+ *
+ * 职责：读工作层的结构化输出，用人话向主人汇报。无 agent 能力，纯文本对话。
+ * 实现：ApiPersona（便宜模型 API）、TemplatePersona（离线模板，无需密钥）。
+ */
+export interface PersonaInput {
+  /** 主人这一轮的指令 */
+  userText: string;
+  /** 工作层这一轮的原始输出（已聚合） */
+  workerText: string;
+  /** 会话名 */
+  sessionName: string;
+}
+
+export interface PersonaEngine {
+  readonly mode: string;
+  /** 把结构化结果总结成人话汇报。 */
+  report(input: PersonaInput): Promise<string>;
+}
