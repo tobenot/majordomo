@@ -48,6 +48,12 @@
       .check li::before {
         content: "☐"; position: absolute; left: 0; color: var(--accent); font-size: 18px;
       }
+      .check li.done::before {
+        content: "☑"; color: var(--green);
+      }
+      .check li.done {
+        color: var(--text2);
+      }
       .note { border-left: 3px solid var(--accent); padding: 8px 14px; background: #141a2a; border-radius: 6px; margin: 12px 0; color: var(--text2); }
       .warn { border-left: 3px solid var(--yellow); background: #221d10; color: #e8d9a8; }
       .good { border-left: 3px solid var(--green); background: #11231a; color: #b6e8c6; }
@@ -67,8 +73,8 @@
 
     <div class="wrap">
       <div class="card good">
-        <strong>一句话结论：</strong>整条链路已跑通且消除了伪功能 —— SDK 工作层现在是常驻 streaming-input 会话，<code>/compact</code>、<code>/model</code> 和真实权限确认都走同一底层 session。
-        验收管道仍可强制 mock；真实工作层默认 <code>permissionMode: "auto"</code>。
+        <strong>一句话结论：</strong>整条链路已跑通 —— SDK 工作层是常驻 streaming-input 会话，<code>/compact</code>、<code>/model</code> 和真实权限确认都走同一底层 session。
+        验收管道支持强制 mock；真实工作层默认 <code>permissionMode: "auto"</code>。
       </div>
 
       <div class="card">
@@ -98,11 +104,11 @@ copy config.example.jsonc config.jsonc
 node dist/cli.js</code></pre>
         <p>进入后直接打字回车（无会话会自动新建），观察：</p>
         <ul class="check">
-          <li>顶部出现 <code>已连接 · profile=home · 工作层=mock</code></li>
-          <li>输入「<code>帮我看看代码</code>」→ 看到灰色 <b>工作层</b> 流式输出</li>
-          <li>随后看到紫色 <b>指挥官</b> 用猫娘口吻的人话汇报</li>
-          <li>输入含「<code>删除</code>」或「<code>rm</code>」→ 弹出黄色权限请求，问 <span class="kbd">y/n</span></li>
-          <li>回 <code>y</code> 批准 → 工作层继续；回 <code>n</code> 拒绝 → 跳过</li>
+          <li class="done">顶部出现 <code>已连接 · profile=home · 工作层=mock</code></li>
+          <li class="done">输入「<code>帮我看看代码</code>」→ 看到灰色 <b>工作层</b> 流式输出</li>
+          <li class="done">随后看到紫色 <b>指挥官</b> 用猫娘口吻的人话汇报</li>
+          <li class="done">输入含「<code>删除</code>」或「<code>rm</code>」→ 弹出黄色权限请求，问 <span class="kbd">y/n</span></li>
+          <li class="done">回 <code>y</code> 批准 → 工作层继续；回 <code>n</code> 拒绝 → 跳过</li>
         </ul>
         <h3>TUI 命令</h3>
         <table>
@@ -205,7 +211,7 @@ PERSONA_MODEL=claude-3-5-haiku-latest</code></pre>
       <div class="card warn">
         <h2><span class="num">!</span>当前已知限制</h2>
         <ul>
-          <li>CLI fallback 已移除；SDK 不可用时只降级到 mock，用于验收 core / TUI / Web / persona / notifier 主链路。</li>
+          <li>真实工作流仅支持常驻 SDK（无 CLI 运行态降级）；SDK 不可用时直接降级到 mock 演示层，用于安全验证整条链路。</li>
           <li>文档层（另开 session 写验收文档）、立绘/CG 渲染、远程接入（CF Access / 推手机）均已留好架构口子，尚未实现。</li>
           <li>Windows 下已规避 Node <code>shell+args</code> 的 <code>DEP0190</code> 警告；如仍出现，优先看 <code>doctor</code> 输出。</li>
         </ul>
