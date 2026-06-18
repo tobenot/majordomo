@@ -194,6 +194,8 @@ async function main(): Promise<void> {
     .command("attach", { isDefault: true })
     .description("连接 daemon 并进入 TUI（默认）")
     .action(async () => {
+      // 注入前台 TUI 活跃状态，使 Console 类型的通知器聪明地静默，绝不破坏游标或双重播报！
+      process.env.MAJORDOMO_TUI_ACTIVE = "true";
       const { config } = buildCfg();
       await ensureDaemon(config, root);
       // 给 daemon 一点点启动时间
