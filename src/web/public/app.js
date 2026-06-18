@@ -6,9 +6,13 @@
   const el = (id) => document.getElementById(id);
 
   function resolveWsUrl(raw) {
+    const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
     if (String(raw).startsWith("__AUTO_WS__:")) {
       const port = String(raw).split(":")[1];
-      return "ws://" + window.location.hostname + ":" + port;
+      return protocol + window.location.hostname + ":" + port;
+    }
+    if (window.location.protocol === "https:" && String(raw).startsWith("ws://")) {
+      return "wss://" + String(raw).slice(5);
     }
     return raw;
   }

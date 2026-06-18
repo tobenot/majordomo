@@ -83,7 +83,7 @@ async function handleRequest(
     const ext = path.extname(filePath).toLowerCase();
     let body: Buffer | string = data;
     if (ext === ".html") {
-      body = data.toString("utf8").replace(/__WS_URL__/g, browserWsUrl);
+      body = data.toString("utf8").replace(/\{\{WS_URL\}\}/g, browserWsUrl);
     }
     res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
     res.end(body);
@@ -91,7 +91,16 @@ async function handleRequest(
 }
 
 function browserWsUrlFor(host: string, port: number): string {
-  if (host === "0.0.0.0" || host === "::") return `__AUTO_WS__:${port}`;
+  const normalized = host.toLowerCase().trim();
+  if (
+    normalized === "0.0.0.0" ||
+    normalized === "::" ||
+    normalized === "127.0.0.1" ||
+    normalized === "localhost" ||
+    normalized === "::1"
+  ) {
+    return `__AUTO_WS__:${port}`;
+  }
   return `ws://${host}:${port}`;
 }
 
