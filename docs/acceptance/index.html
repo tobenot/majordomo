@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>majordomo 验收 Guide · 指挥官 v0.1</title>
+    <style>
+      :root {
+        --bg: #0e1016; --card: #161a26; --border: #2a3042;
+        --text: #e8ebf2; --text2: #9aa3b6; --accent: #4d8dff; --accent2: #b46bff;
+        --green: #35c46a; --yellow: #e6b450; --code: #1b2030;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.7; padding: 0 0 80px;
+      }
+      header {
+        padding: 36px 24px 24px; text-align: center;
+        background: linear-gradient(160deg, #1a1f33, #11141f);
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 { margin: 0 0 6px; font-size: 26px; }
+      header h1 .accent { color: var(--accent2); }
+      header p { margin: 0; color: var(--text2); }
+      .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+      .card {
+        background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+        padding: 22px 24px; margin: 22px 0;
+      }
+      h2 { font-size: 19px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+      h2 .num {
+        background: var(--accent); color: #fff; width: 28px; height: 28px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 15px; flex: 0 0 auto;
+      }
+      h3 { font-size: 15px; color: var(--accent); margin: 18px 0 8px; }
+      pre {
+        background: var(--code); border: 1px solid var(--border); border-radius: 10px;
+        padding: 14px 16px; overflow-x: auto; margin: 10px 0;
+      }
+      code { font-family: "Cascadia Code", Consolas, monospace; font-size: 13.5px; color: #c8d6ff; }
+      p code, li code { background: var(--code); padding: 1px 6px; border-radius: 5px; color: #c8d6ff; }
+      ul, ol { padding-left: 22px; }
+      li { margin: 5px 0; }
+      .check { list-style: none; padding-left: 0; }
+      .check li { padding-left: 30px; position: relative; }
+      .check li::before {
+        content: "☐"; position: absolute; left: 0; color: var(--accent); font-size: 18px;
+      }
+      .note { border-left: 3px solid var(--accent); padding: 8px 14px; background: #141a2a; border-radius: 6px; margin: 12px 0; color: var(--text2); }
+      .warn { border-left: 3px solid var(--yellow); background: #221d10; color: #e8d9a8; }
+      .good { border-left: 3px solid var(--green); background: #11231a; color: #b6e8c6; }
+      .pill { display: inline-block; background: var(--code); border: 1px solid var(--border); border-radius: 20px; padding: 2px 12px; font-size: 12px; color: var(--text2); margin: 2px; }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+      th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; font-size: 14px; }
+      th { background: var(--code); color: var(--accent); }
+      .kbd { background: #222; border: 1px solid #444; border-radius: 5px; padding: 1px 7px; font-size: 12px; }
+      footer { text-align: center; color: var(--text2); margin-top: 30px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>majordomo <span class="accent">· 指挥官</span> 验收 Guide</h1>
+      <p>v0.1 · Claude Code 多会话调度器 · 第三代 AI 工作流脚手架</p>
+    </header>
+
+    <div class="wrap">
+      <div class="card good">
+        <strong>一句话结论：</strong>整条链路已跑通且自洽防御 —— 没装 claude、没配 API key 也能开箱即跑（自动降级 mock 工作层 + 离线模板人设层）。
+        本机检测到真实 <code>claude</code>，<code>auto</code> 模式会优先用它（需已登录）。
+      </div>
+
+      <div class="card">
+        <h2><span class="num">1</span>构建</h2>
+        <p>在项目根目录执行（已装好依赖；若没装先 <code>npm install</code>）：</p>
+        <pre><code>npm run build</code></pre>
+        <p>产物在 <code>dist/</code>，Web 静态资源会自动拷到 <code>dist/web/public</code>。</p>
+        <ul class="check">
+          <li>构建无报错，出现 <code>[copy-assets] web public -&gt; dist/web/public</code></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">2</span>验收 TUI（开箱即跑，强烈建议先用 mock）</h2>
+        <div class="note warn">
+          本机装了真实 <code>claude</code>，<code>auto</code> 会去调它并可能因登录/交互而卡住。
+          <b>验收管道本身请先强制 mock</b>：复制 <code>config.example.jsonc</code> 为 <code>config.jsonc</code>，把 <code>worker.engine</code> 改成 <code>"mock"</code>。
+        </div>
+        <pre><code># 复制配置并改 engine 为 mock（一次性）
+copy config.example.jsonc config.jsonc
+# 然后编辑 config.jsonc，把 "engine": "auto" 改成 "engine": "mock"
+
+# 启动 TUI（默认命令即 attach，内嵌 daemon + 进入 TUI）
+node dist/cli.js</code></pre>
+        <p>进入后直接打字回车（无会话会自动新建），观察：</p>
+        <ul class="check">
+          <li>顶部出现 <code>已连接 · profile=home · 工作层=mock</code></li>
+          <li>输入「<code>帮我看看代码</code>」→ 看到灰色 <b>工作层</b> 流式输出</li>
+          <li>随后看到紫色 <b>指挥官</b> 用猫娘口吻的人话汇报</li>
+          <li>输入含「<code>删除</code>」或「<code>rm</code>」→ 弹出黄色权限请求，问 <span class="kbd">y/n</span></li>
+          <li>回 <code>y</code> 批准 → 工作层继续；回 <code>n</code> 拒绝 → 跳过</li>
+        </ul>
+        <h3>TUI 命令</h3>
+        <table>
+          <tr><th>命令</th><th>作用</th></tr>
+          <tr><td><code>/new [名字]</code></td><td>新建会话</td></tr>
+          <tr><td><code>/sessions</code> 或 <code>/ls</code></td><td>列出所有会话（报菜名）</td></tr>
+          <tr><td><code>/resume &lt;id&gt;</code></td><td>续接历史会话</td></tr>
+          <tr><td><code>/profile &lt;名&gt;</code></td><td>切换 profile（只影响新开会话）</td></tr>
+          <tr><td><code>/quit</code></td><td>退出</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">3</span>验收 Web 面板（看立绘位 / 会话管理）</h2>
+        <pre><code>node dist/cli.js web</code></pre>
+        <p>浏览器打开提示的地址（默认 <code>http://127.0.0.1:4318</code>）：</p>
+        <ul class="check">
+          <li>右上角连接状态变绿「已连接」，显示工作层引擎与 profile 下拉</li>
+          <li>左侧会话列表（与 TUI 同一份状态，TUI 里建的会话这里能看到）</li>
+          <li>左下角有「立绘 / CG」占位框（后续迭代填真图）</li>
+          <li>输入框发消息 → 我方蓝气泡、工作层灰气泡、指挥官紫气泡分明</li>
+          <li>触发权限 → 顶部黄条出现「批准 / 拒绝」按钮</li>
+          <li>切换 profile 下拉 → 提示「已切换（只影响新开会话）」</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">4</span>验收 Profile 机制 & 配置</h2>
+        <pre><code># 查看解析后的配置与来源
+node dist/cli.js config
+
+# 切换活跃 profile（持久化到 ~/.majordomo/config.jsonc）
+node dist/cli.js profile internal</code></pre>
+        <ul class="check">
+          <li><code>config</code> 打印出 home / internal / tclaude 三个 profile</li>
+          <li><code>profile internal</code> 后再 <code>config</code>，<code>activeProfile</code> 变为 internal</li>
+          <li>确认 internal 的 <code>personalDir</code> 是 <code>~/.claude-internal</code>（不是 <code>.claude</code>，这是关键坑）</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">5</span>接真实工作层（可选，需已登录 claude）</h2>
+        <p>把 <code>config.jsonc</code> 的 <code>worker.engine</code> 设回 <code>"auto"</code> 或 <code>"claude"</code>。</p>
+        <div class="note">
+          实现说明：真实引擎用 <code>claude -p --output-format stream-json --resume &lt;id&gt;</code>，
+          prompt 走 stdin（避免命令行注入）。连续性靠捕获 <code>session_id</code> + <code>--resume</code>，
+          不依赖不可靠的 <code>--continue</code>。
+        </div>
+        <ul class="check">
+          <li>会话 engine 显示为 <code>claude</code></li>
+          <li>真实回答经人设层润色后汇报；底层 session_id 被存下（<code>/sessions</code> 可见）</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">6</span>接真实人设层 API（可选）</h2>
+        <p>复制 <code>.env.example</code> 为 <code>.env</code>，填 OpenAI 兼容接口的便宜模型：</p>
+        <pre><code>PERSONA_API_KEY=你的key
+PERSONA_API_BASE=https://你的网关/v1
+PERSONA_MODEL=gpt-4o-mini</code></pre>
+        <ul class="check">
+          <li>启动日志出现「检测到人设层 API 配置，使用 API 模式」</li>
+          <li>汇报内容由真实模型生成（比离线模板更自然）；API 失败会自动降级转述，不会崩</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">7</span>回归测试要点（改动后重点验）</h2>
+        <ul>
+          <li><b>降级链路</b>：删掉 <code>config.jsonc</code> 和 <code>.env</code> 后仍能跑（mock + 模板）。</li>
+          <li><b>权限流程</b>：mock 下输入危险词必弹权限，批准/拒绝都要正确续行。</li>
+          <li><b>多会话隔离</b>：开两个会话交替输入，消息不串台（按 sessionId 路由）。</li>
+          <li><b>状态一致</b>：TUI 建的会话，Web 刷新后能看到（同一 <code>~/.majordomo/sessions.json</code>）。</li>
+          <li><b>profile 持久化</b>：切换后重启 daemon，activeProfile 保持。</li>
+          <li><b>异常自洽</b>：故意配错端口 / 错 profile，应给出清晰报错并降级，不静默崩溃。</li>
+        </ul>
+      </div>
+
+      <div class="card warn">
+        <h2><span class="num">!</span>当前已知限制</h2>
+        <ul>
+          <li>真实工作层的<b>交互式权限确认</b>（canUseTool 双向通道）未接 —— 需 SDK 的 stream-json 输入；当前 headless 一次性回合 + acceptEdits 不产生交互权限。<b>MockWorker 已完整演示该 UI 流程</b>，接 SDK 后即可对接真实权限。</li>
+          <li>文档层（另开 session 写验收文档）、立绘/CG 渲染、远程接入（CF Access / 推手机）均已留好架构口子，尚未实现。</li>
+          <li>Windows 上探测 <code>claude --version</code> 会有一条 Node <code>DEP0190</code> shell 弃用警告，不影响功能。</li>
+        </ul>
+      </div>
+
+      <footer>
+        majordomo v0.1 · 验收文档优先写规则与流程，改参数无需维护本文 · 详见 <code>docs/architecture.md</code>
+      </footer>
+    </div>
+  </body>
+</html>
