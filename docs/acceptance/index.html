@@ -127,7 +127,7 @@ node dist/cli.js</code></pre>
           <li>输入框发消息 → 我方蓝气泡、工作层灰气泡、指挥官紫气泡分明</li>
           <li>触发权限 → 顶部黄条出现「批准 / 拒绝」按钮</li>
           <li>切换 profile 下拉 → 提示「已切换（只影响新开会话）」</li>
-          <li>访问 <code>/healthz</code> 返回 JSON：<code>{ ok: true, wsUrl, publicDir }</code></li>
+          <li>访问 <code>/healthz</code> 返回 JSON：<code>{ ok, web, assets, daemonWs }</code>，且不暴露本机绝对路径</li>
         </ul>
       </div>
 
@@ -152,6 +152,7 @@ node dist/cli.js profile internal</code></pre>
           网络调研结论：TypeScript SDK 包名是 <code>@anthropic-ai/claude-code</code>，公开主 API 是 <code>query()</code> async iterator；
           CLI fallback 用 <code>claude -p --output-format stream-json --resume &lt;id&gt;</code>。
           prompt 走 stdin（避免命令行注入），连续性靠捕获 <code>session_id</code> + <code>--resume</code>。
+          <code>permissionMode: "auto"</code> 暂时映射到更保守的 <code>default</code>，不是自动批准。
         </div>
         <pre><code># 若要强制 SDK 路线，先安装官方包
 npm install @anthropic-ai/claude-code

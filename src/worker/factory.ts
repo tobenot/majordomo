@@ -22,8 +22,9 @@ export function createWorker(choice: EngineChoice, opts: WorkerStartOptions): Wo
   const cliAvailable = isCommandAvailable(opts.command);
 
   if (choice === "sdk") {
-    // 不能在同步工厂里 await 探测 SDK，直接创建；SdkWorker 会在 send 时自检并报错。
-    return new SdkWorker(opts);
+    if (isSdkResolvable()) return new SdkWorker(opts);
+    log.warn("worker.engine=sdk 但未安装 @anthropic-ai/claude-code，降级到 mock");
+    return new MockWorker(opts);
   }
 
   if (choice === "cli" || choice === "claude") {
@@ -50,7 +51,7 @@ export function resolveEngineName(choice: EngineChoice, command: string): string
   if (choice === "mock") return "mock";
   const sdk = isSdkResolvable();
   const cli = isCommandAvailable(command);
-  if (choice === "sdk") return sdk ? "sdk" : "sdk(未安装，运行时降级/报错)";
+  if (choice === "sdk") return sdk ? "sdk" : "mock(降级)";
   if (choice === "cli" || choice === "claude") return cli ? "cli" : "mock(降级)";
   if (sdk) return "sdk";
   if (cli) return "cli";

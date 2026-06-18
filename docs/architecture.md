@@ -95,17 +95,21 @@ sequenceDiagram
 ## 关键设计取舍
 
 - **Claude Code 接入以公开文档为准**：网络调研确认 TS SDK 包是 `@anthropic-ai/claude-code`，主 API 是 `query()` async iterator；公开文档没有稳定 `ClaudeSDKClient/canUseTool`。
+- **SDK 是可选依赖，不是硬依赖**：原因是 SDK 公共 API 仍在变化、权限桥接尚未落稳，而 CLI 是当前更可预期的真实工作层兜底。项目需要在未安装 SDK、未安装 Claude CLI 的机器上也能跑通 TUI / Web / 会话 / 人设 / 通知主链路，所以采用 `SDK -> CLI -> mock` 的防御式降级。
+- **这不是为了支持 codex**：当前产品边界仍是 Claude Code 调度器。`WorkerEngine` 抽象只是在工程上隔离工作层实现，未来如果要接其他 agent 后端可以扩展，但不是这次 SDK 可选化的设计动机。
 - **工作层三段降级**：`auto` 优先 SDK；没有 SDK 就走 profile CLI；没有 CLI 就 mock，保证开箱即跑。
-- **连续 session**：CLI fallback 用捕获 `session_id` + `--resume` 续接（可靠），不依赖 `--continue`。SDK Worker 也保存 streamed `session_id`。
-- **安全启动**：CLI prompt 走 stdin，不把用户文本拼进命令行；Windows 下显式用 `cmd.exe /d /s /c`，避免 Node shell+args 弃用警告。
+- **工作层会话模型 = 常驻优先**（核心决策）：SDK Worker 用 streaming input 模式的 `query()`，传入一个受控 `AsyncIterable` 队列，进程全程不退、上下文在内存。这才是灵感文档说的"真连续"。`session_id` 仍持久化，但 `--resume` 退化为**崩溃恢复兜底**，不是日常每轮手段。CLI `-p` fallback 是无状态一次性兜底，明确不支持 compact / 交互权限。
+- **`/compact` `/model` 透传在常驻 SDK 下天然生效**：作为普通用户消息喂进活着的 session 即可（SDK 官方支持 slash command 作为输入）；compact 返回 `SDKCompactBoundaryMessage`，Session 据此告知人设层。Auto-Compact 默认开启，多数时候无需手动。
+- **安全启动**：CLI prompt 走 stdin，不把用户文本拼进命令行；Windows 下优先 `shell=false`，仅 `.cmd/.bat` shim 走 `cmd.exe /d /s /c` fallback。
 - **自测与诊断**：`doctor` 检查 Node / SDK / profile 命令 / Web 资源 / 通知脚本；`selftest` 用临时 `MAJORDOMO_HOME` 隔离端到端验证。
-- **profile 切换只影响新开会话**：已跑的会话绑死启动时的 profile。坑：内网版个人目录是 `.claude-internal` 而非 `.claude`。
+- **权限走 `canUseTool` 真回调**：SDK 官方提供 `CanUseTool` 回调（权限主路径之一）。工具需要权限时回调触发 → Session 转 `permission_request` 给前端 → 用户应答 → resolve `{behavior:'allow'|'deny'}`。默认 `permissionMode: acceptEdits`（编辑自动过）+ `canUseTool` 兜高危；可切 TS 独有的 `auto`（模型分类器）。**不需要 MCP permission-prompt-tool 重桥接**。
+- **profile 切换只影响新开会话**：已跑的会话绑死启动时的 profile；`activeProfile` 是用户级偏好，profile 命令写全局配置并覆盖项目示例值。坑：内网版个人目录是 `.claude-internal` 而非 `.claude`。
 - **通知可插拔、日记走 Node 原生**：日记是人设层副作用，跨平台（Linux 服务器也能写），不绑死 PowerShell。
 - **存储先用 JSON 文件**（`~/.majordomo/`，可用 `MAJORDOMO_HOME` 覆盖）：避开 Windows native 模块编译，协议层不依赖实现，未来可换 SQLite。
 
 ## 已知未做（留待后续）
 
-- 工作层真正的交互式权限确认不应假设 `canUseTool`，公开文档给出的路线是 `--permission-prompt-tool` + MCP 工具桥接 UI。MockWorker 已演示完整权限 UI 流程，后续要补 MCP bridge。
+- **工作层常驻化 + `canUseTool` 落地**（最高优先，已定方案见上）：SdkWorker 当前是"每轮新起 `query()` 后退出"的伪连续，需重构为 streaming input 常驻；`resolvePermission` 当前是空实现，需接 `canUseTool` 回调。包名升级到 `@anthropic-ai/claude-agent-sdk`。MockWorker 已演示完整权限 UI 流程，可直接复用前端协议。
 - 文档层（另开 session 写验收文档）。
 - 立绘 / CG 渲染（Web 面板已留位）。
 - 远程接入（CF Access / 推手机 notifier）——通信层已是 WebSocket，留好口子。

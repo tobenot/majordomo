@@ -20,6 +20,7 @@ export async function runSelfTest(baseConfig: Config, projectRoot: string): Prom
   process.env.MAJORDOMO_HOME = tmpHome;
 
   const cfg: Config = JSON.parse(JSON.stringify(baseConfig));
+  cfg.host = "127.0.0.1";
   cfg.port = await pickPort(4500, 4800);
   cfg.worker.engine = "mock";
   cfg.persona.mode = "template";
@@ -46,7 +47,16 @@ function driveClient(port: number, events: string[]): Promise<void> {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
     let sid = "";
     let reports = 0;
-    const timer = setTimeout(() => reject(new Error("selftest timeout")), 15000);
+    const fail = (e: Error) => {
+      clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      reject(e);
+    };
+    const timer = setTimeout(() => fail(new Error("selftest timeout")), 15000);
 
     ws.on("open", () => ws.send(JSON.stringify({ type: "hello", client: "tui" })));
     ws.on("message", (d) => {
@@ -76,14 +86,10 @@ function driveClient(port: number, events: string[]): Promise<void> {
           })
         );
       } else if (m.type === "error") {
-        clearTimeout(timer);
-        reject(new Error(m.message));
+        fail(new Error(m.message));
       }
     });
-    ws.on("error", (e) => {
-      clearTimeout(timer);
-      reject(e);
-    });
+    ws.on("error", (e) => fail(e));
   });
 }
 
@@ -97,5 +103,5 @@ async function pickPort(start: number, end: number): Promise<number> {
     });
     if (ok) return p;
   }
-  return 0;
+  throw new Error(`未找到可用端口: ${start}-${end}`);
 }

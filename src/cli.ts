@@ -10,6 +10,8 @@ import { startWebServer } from "./web/server";
 import { setVerbose, createLogger } from "./core/logger";
 import { getCommandVersion } from "./worker/claudeCodeWorker";
 import { isSdkResolvable, resolveEngineName, EngineChoice } from "./worker/factory";
+import { isSdkAvailable } from "./worker/sdkWorker";
+import { expandHome } from "./core/paths";
 
 const log = createLogger("cli");
 
@@ -52,12 +54,16 @@ async function ensureDaemon(
   }
 }
 
+function connectHostFor(host: string): string {
+  return host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
+}
+
 async function main(): Promise<void> {
   const program = new Command();
   program
     .name("commander")
     .description("majordomo · 指挥官 —— Claude Code 多会话调度器")
-    .version("0.1.0")
+    .version("0.2.0")
     .option("-H, --host <host>", "core daemon host")
     .option("-p, --port <port>", "core daemon port", (v) => parseInt(v, 10))
     .option("-v, --verbose", "详细日志");
@@ -141,7 +147,7 @@ async function main(): Promise<void> {
   program
     .command("doctor")
     .description("检查 Node、配置、profile 命令、SDK、Web 资源和通知脚本")
-    .action(() => {
+    .action(async () => {
       const { config, sources } = buildCfg();
       const active = resolveProfile(config);
       const engine = resolveEngineName(config.worker.engine as EngineChoice, active.profile.command);
@@ -150,10 +156,16 @@ async function main(): Promise<void> {
       rows.push(["Config sources", sources.length ? sources.join(", ") : "defaults only"]);
       rows.push(["Active profile", `${active.name} (${active.profile.command})`]);
       rows.push(["Resolved engine", engine]);
-      rows.push(["SDK package", isSdkResolvable() ? "@anthropic-ai/claude-code resolvable" : "not installed (CLI/mock fallback)"]);
+      const sdkResolvable = isSdkResolvable();
+      const sdkRuntime = sdkResolvable ? await isSdkAvailable() : false;
+      rows.push(["SDK package", sdkRuntime ? "import ok" : sdkResolvable ? "resolvable, import failed" : "not installed (CLI/mock fallback)"]);
       for (const [name, profile] of Object.entries(config.profiles)) {
+        const personalDir = expandHome(profile.personalDir);
+        const rulesFile = path.join(personalDir, "CLAUDE.md");
         rows.push([`Profile ${name}`, getCommandVersion(profile.command) ?? `command not found: ${profile.command}`]);
+        rows.push([`Rules ${name}`, fs.existsSync(rulesFile) ? `found ${rulesFile}` : `not found ${rulesFile}`]);
       }
+      rows.push(["Permission", config.permissionMode === "auto" ? "auto -> default (MCP permission bridge not implemented)" : config.permissionMode]);
       rows.push(["Web assets", fs.existsSync(path.join(__dirname, "web", "public", "index.html")) ? "dist ok" : "missing (run npm run build)"]);
       rows.push(["Notify script", fs.existsSync(path.join(root, "tools", "notify-done", "notify-done.ps1")) ? "found" : "missing"]);
       const w = Math.max(...rows.map((r) => r[0].length));
@@ -186,7 +198,7 @@ async function main(): Promise<void> {
       await ensureDaemon(config, root);
       // 给 daemon 一点点启动时间
       await new Promise((r) => setTimeout(r, 120));
-      await runTui(config.host, config.port);
+      await runTui(connectHostFor(config.host), config.port);
     });
 
   await program.parseAsync(process.argv);

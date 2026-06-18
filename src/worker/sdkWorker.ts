@@ -24,6 +24,7 @@ export class SdkWorker extends WorkerEngine {
     }
     this.running = true;
     this.abort = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
 
     try {
       const query = await loadQuery();
@@ -35,9 +36,9 @@ export class SdkWorker extends WorkerEngine {
       if (this.opts.disallowedTools?.length) options.disallowedTools = this.opts.disallowedTools;
       if (this.workerSessionId) options.resume = this.workerSessionId;
 
-      const timer = this.opts.timeoutMs
-        ? setTimeout(() => this.abort?.abort(), this.opts.timeoutMs)
-        : undefined;
+      if (this.opts.timeoutMs) {
+        timer = setTimeout(() => this.abort?.abort(), this.opts.timeoutMs);
+      }
 
       for await (const msg of query({
         prompt: text,
@@ -47,11 +48,10 @@ export class SdkWorker extends WorkerEngine {
       })) {
         this.handleSdkMessage(msg);
       }
-
-      if (timer) clearTimeout(timer);
     } catch (e) {
       this.emitEvent({ kind: "error", message: `SDK 工作层失败: ${(e as Error).message}` });
     } finally {
+      if (timer) clearTimeout(timer);
       this.running = false;
       this.abort = undefined;
       this.emitEvent({ kind: "done" });
@@ -64,6 +64,7 @@ export class SdkWorker extends WorkerEngine {
 
   async close(): Promise<void> {
     this.abort?.abort();
+    this.running = false;
   }
 
   private handleSdkMessage(obj: any): void {
@@ -79,7 +80,7 @@ export class SdkWorker extends WorkerEngine {
         }
         break;
       case "assistant":
-        emitAssistantContent(this, obj.message?.content ?? []);
+        this.emitAssistantContent(obj.message?.content ?? []);
         break;
       case "result":
         if (obj.subtype && obj.subtype !== "success") {
@@ -91,6 +92,16 @@ export class SdkWorker extends WorkerEngine {
         break;
       default:
         break;
+    }
+  }
+
+  private emitAssistantContent(content: any[]): void {
+    for (const block of content) {
+      if (block?.type === "text" && block.text) {
+        this.emitEvent({ kind: "text", text: block.text });
+      } else if (block?.type === "tool_use") {
+        this.emitEvent({ kind: "text", text: `[工具调用] ${block.name ?? "?"}` });
+      }
     }
   }
 }
@@ -105,23 +116,17 @@ export async function isSdkAvailable(): Promise<boolean> {
 }
 
 async function loadQuery(): Promise<QueryFn> {
-  const mod = await import("@anthropic-ai/claude-code");
-  if (typeof (mod as any).query !== "function") {
+  const dynamicImport = new Function("specifier", "return import(specifier)") as (
+    specifier: string
+  ) => Promise<any>;
+  const mod = await dynamicImport("@anthropic-ai/claude-code");
+  if (typeof mod.query !== "function") {
     throw new Error("@anthropic-ai/claude-code 未导出 query()；请检查版本");
   }
-  return (mod as any).query as QueryFn;
-}
-
-function emitAssistantContent(worker: WorkerEngine, content: any[]): void {
-  for (const block of content) {
-    if (block?.type === "text" && block.text) {
-      (worker as any).emitEvent({ kind: "text", text: block.text });
-    } else if (block?.type === "tool_use") {
-      (worker as any).emitEvent({ kind: "text", text: `[工具调用] ${block.name ?? "?"}` });
-    }
-  }
+  return mod.query as QueryFn;
 }
 
 function mapPermissionMode(mode: string): string {
-  return mode === "auto" ? "acceptEdits" : mode;
+  // MCP permission bridge 尚未接入前，auto 采用更保守的 default，而不是 acceptEdits。
+  return mode === "auto" ? "default" : mode;
 }

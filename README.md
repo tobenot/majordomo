@@ -54,7 +54,7 @@ commander
 | `claude` | `cli` 的兼容别名 |
 | `mock` | 回显引擎，无需任何凭证，用于验收整条链路 |
 
-支持 `maxTurns`、`timeoutMs`、`allowedTools`、`disallowedTools`。
+支持 `maxTurns`、`timeoutMs`、`allowedTools`、`disallowedTools`。`permissionMode: "auto"` 在 MCP 权限桥接完成前会按更保守的 `default` 处理；如果明确想自动接受编辑类操作，可设为 `acceptEdits`。
 
 ### Profiles（claude / claude-internal / tclaude 一键切换）
 
@@ -79,6 +79,8 @@ node dist/cli.js doctor
 1. 可选 SDK Worker：安装 SDK 后 `auto` 优先使用 `query()`。
 2. CLI fallback：用 `claude -p --output-format stream-json --resume <session_id>`，prompt 走 stdin，避免命令行注入。
 
+SDK 做成可选依赖是工程防御：公共 API 仍在变化、权限桥接尚未落稳，而且项目要在没装 SDK 的机器上也能完成主链路验收。这不是为了支持 codex；当前产品边界仍是 Claude Code 调度器，`WorkerEngine` 只是隔离工作层实现。
+
 真正的交互式权限确认后续应走 Claude Code 文档里的 `--permission-prompt-tool` + MCP 桥接，而不是假设存在未公开的 `canUseTool`。
 
 ## 验收
@@ -91,7 +93,7 @@ npm run doctor
 npm run selftest
 ```
 
-Web 面板启动后也有 `GET /healthz` 可做健康检查。
+Web 面板启动后也有 `GET /healthz` 可做健康检查；返回 `web/assets/daemonWs` 三段状态，不泄露本机绝对路径。
 
 ## Status
 

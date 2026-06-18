@@ -2,8 +2,16 @@
 (function () {
   "use strict";
 
-  const WS_URL = window.__WS_URL__;
+  const WS_URL = resolveWsUrl(window.__WS_URL__);
   const el = (id) => document.getElementById(id);
+
+  function resolveWsUrl(raw) {
+    if (String(raw).startsWith("__AUTO_WS__:")) {
+      const port = String(raw).split(":")[1];
+      return "ws://" + window.location.hostname + ":" + port;
+    }
+    return raw;
+  }
 
   const state = {
     ws: null,

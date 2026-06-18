@@ -55,6 +55,9 @@ export const DEFAULT_CONFIG: Config = {
   diaryDir: ".codebuddy/memory",
 };
 
+const WORKER_ENGINES = new Set(["auto", "sdk", "cli", "claude", "mock"]);
+const PERSONA_MODES = new Set(["auto", "api", "template"]);
+
 /**
  * 极简 JSONC 解析：去掉 // 行注释、/* *\/ 块注释、对象/数组尾逗号，再 JSON.parse。
  * 自洽防御：跳过字符串字面量内部，避免误删 URL 里的 //。
@@ -153,19 +156,30 @@ export interface LoadedConfig {
 }
 
 export function loadConfig(projectRoot: string = process.cwd()): LoadedConfig {
-  let cfg: Config = DEFAULT_CONFIG;
+  let cfg: Config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   const sources: string[] = [];
+  let globalActiveProfile: string | undefined;
+
   for (const file of configCandidates(projectRoot)) {
     if (!fs.existsSync(file)) continue;
     try {
       const parsed = parseJsonc(fs.readFileSync(file, "utf8")) as Partial<Config>;
+      if (isGlobalConfig(file) && typeof parsed.activeProfile === "string") {
+        globalActiveProfile = parsed.activeProfile;
+      }
       cfg = deepMerge(cfg, parsed);
       sources.push(file);
     } catch (e) {
       log.warn(`配置文件解析失败，已跳过: ${file}: ${(e as Error).message}`);
     }
   }
-  // 自洽校验
+
+  cfg = normalizeConfig(cfg);
+  // activeProfile 是用户级偏好：profile 命令写全局配置，即使项目 config.jsonc 含 activeProfile 也应生效。
+  if (globalActiveProfile && cfg.profiles[globalActiveProfile]) {
+    cfg.activeProfile = globalActiveProfile;
+  }
+
   if (!cfg.profiles[cfg.activeProfile]) {
     log.warn(
       `activeProfile "${cfg.activeProfile}" 在 profiles 中不存在，回退到第一个可用 profile`
@@ -173,6 +187,43 @@ export function loadConfig(projectRoot: string = process.cwd()): LoadedConfig {
     cfg.activeProfile = Object.keys(cfg.profiles)[0] ?? "home";
   }
   return { config: cfg, sources };
+}
+
+function isGlobalConfig(file: string): boolean {
+  return path.dirname(file) === globalDir();
+}
+
+function normalizeConfig(cfg: Config): Config {
+  if (!cfg || typeof cfg !== "object") cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  if (typeof cfg.host !== "string" || !cfg.host.trim()) cfg.host = DEFAULT_CONFIG.host;
+  if (!Number.isInteger(cfg.port) || cfg.port < 1 || cfg.port > 65535) cfg.port = DEFAULT_CONFIG.port;
+  if (!cfg.profiles || typeof cfg.profiles !== "object" || Array.isArray(cfg.profiles)) {
+    cfg.profiles = DEFAULT_CONFIG.profiles;
+  }
+  for (const [name, p] of Object.entries(cfg.profiles)) {
+    if (!p || typeof p.command !== "string" || !p.command.trim()) {
+      log.warn(`profile "${name}" 缺少 command，已移除`);
+      delete cfg.profiles[name];
+      continue;
+    }
+    if (typeof p.personalDir !== "string" || !p.personalDir.trim()) {
+      p.personalDir = `~/.${p.command}`;
+    }
+  }
+  if (Object.keys(cfg.profiles).length === 0) cfg.profiles = DEFAULT_CONFIG.profiles;
+  if (!WORKER_ENGINES.has(cfg.worker?.engine)) cfg.worker = { ...cfg.worker, engine: DEFAULT_CONFIG.worker.engine };
+  if (cfg.worker.maxTurns !== undefined && (!Number.isInteger(cfg.worker.maxTurns) || cfg.worker.maxTurns < 1)) {
+    delete cfg.worker.maxTurns;
+  }
+  if (cfg.worker.timeoutMs !== undefined && (!Number.isInteger(cfg.worker.timeoutMs) || cfg.worker.timeoutMs < 1000)) {
+    delete cfg.worker.timeoutMs;
+  }
+  if (!Array.isArray(cfg.worker.allowedTools)) delete cfg.worker.allowedTools;
+  if (!Array.isArray(cfg.worker.disallowedTools)) delete cfg.worker.disallowedTools;
+  if (!PERSONA_MODES.has(cfg.persona?.mode)) cfg.persona = { ...DEFAULT_CONFIG.persona, ...cfg.persona, mode: DEFAULT_CONFIG.persona.mode };
+  if (!Array.isArray(cfg.notifiers)) cfg.notifiers = DEFAULT_CONFIG.notifiers;
+  if (typeof cfg.diaryDir !== "string" || !cfg.diaryDir.trim()) cfg.diaryDir = DEFAULT_CONFIG.diaryDir;
+  return cfg;
 }
 
 /** 解析某个 profile，展开 ~ 路径。 */

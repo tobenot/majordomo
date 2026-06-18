@@ -1,6 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
+import { WebSocket } from "ws";
 import { createLogger } from "../core/logger";
 
 const log = createLogger("web");
@@ -37,39 +38,83 @@ export function startWebServer(opts: {
   daemonPort: number;
 }): Promise<{ host: string; port: number }> {
   const publicDir = resolvePublicDir();
-  const wsUrl = `ws://${opts.daemonHost}:${opts.daemonPort}`;
+  const browserWsUrl = browserWsUrlFor(opts.daemonHost, opts.daemonPort);
+  const healthWsUrl = concreteWsUrlFor(opts.daemonHost, opts.daemonPort);
 
   const server = http.createServer((req, res) => {
-    let urlPath = (req.url || "/").split("?")[0];
-    if (urlPath === "/healthz") {
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ ok: true, wsUrl, publicDir }));
-      return;
-    }
-    if (urlPath === "/") urlPath = "/index.html";
-    const filePath = path.join(publicDir, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ""));
-
-    fs.readFile(filePath, (err, data) => {
-      if (err) {
-        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("404 Not Found");
-        return;
-      }
-      const ext = path.extname(filePath).toLowerCase();
-      let body: Buffer | string = data;
-      if (ext === ".html") {
-        body = data.toString("utf8").replace(/__WS_URL__/g, wsUrl);
-      }
-      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
-      res.end(body);
-    });
+    void handleRequest(req, res, publicDir, browserWsUrl, healthWsUrl);
   });
 
   return new Promise((resolve, reject) => {
     server.on("error", reject);
     server.listen(opts.webPort, opts.webHost, () => {
-      log.info(`Web 面板 http://${opts.webHost}:${opts.webPort} （连 ${wsUrl}）`);
+      log.info(`Web 面板 http://${opts.webHost}:${opts.webPort} （连 ${healthWsUrl}）`);
       resolve({ host: opts.webHost, port: opts.webPort });
+    });
+  });
+}
+
+async function handleRequest(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  publicDir: string,
+  browserWsUrl: string,
+  healthWsUrl: string
+): Promise<void> {
+  let urlPath = (req.url || "/").split("?")[0];
+  if (urlPath === "/healthz" || urlPath === "/readyz") {
+    const assetsOk = fs.existsSync(path.join(publicDir, "index.html"));
+    const daemonWsOk = await canConnectWs(healthWsUrl, 600);
+    const ok = assetsOk && daemonWsOk;
+    res.writeHead(ok ? 200 : 503, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok, web: true, assets: assetsOk, daemonWs: daemonWsOk }));
+    return;
+  }
+
+  if (urlPath === "/") urlPath = "/index.html";
+  const filePath = path.join(publicDir, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ""));
+
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("404 Not Found");
+      return;
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    let body: Buffer | string = data;
+    if (ext === ".html") {
+      body = data.toString("utf8").replace(/__WS_URL__/g, browserWsUrl);
+    }
+    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+    res.end(body);
+  });
+}
+
+function browserWsUrlFor(host: string, port: number): string {
+  if (host === "0.0.0.0" || host === "::") return `__AUTO_WS__:${port}`;
+  return `ws://${host}:${port}`;
+}
+
+function concreteWsUrlFor(host: string, port: number): string {
+  const connectHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
+  return `ws://${connectHost}:${port}`;
+}
+
+function canConnectWs(url: string, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(url);
+    const timer = setTimeout(() => {
+      ws.close();
+      resolve(false);
+    }, timeoutMs);
+    ws.once("open", () => {
+      clearTimeout(timer);
+      ws.close();
+      resolve(true);
+    });
+    ws.once("error", () => {
+      clearTimeout(timer);
+      resolve(false);
     });
   });
 }

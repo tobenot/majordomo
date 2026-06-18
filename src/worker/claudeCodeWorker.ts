@@ -165,7 +165,8 @@ export class ClaudeCodeWorker extends WorkerEngine {
 function mapPermissionMode(mode: string): string | null {
   switch (mode) {
     case "auto":
-      return "acceptEdits";
+      // MCP permission bridge 尚未接入前，auto 采用更保守的 default，而不是 acceptEdits。
+      return "default";
     case "default":
     case "acceptEdits":
     case "bypassPermissions":

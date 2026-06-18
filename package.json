@@ -1,6 +1,6 @@
 {
   "name": "majordomo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A persona-driven, multi-session orchestrator for Claude Code. Headless workers, a character frontend, TUI + Web panel.",
   "license": "AGPL-3.0",
   "type": "commonjs",
@@ -12,6 +12,7 @@
   "files": [
     "dist",
     "src/web/public",
+    "docs",
     "tools/notify-done",
     "config.example.jsonc",
     ".env.example",

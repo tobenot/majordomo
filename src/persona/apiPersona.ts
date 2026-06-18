@@ -56,9 +56,9 @@ export class ApiPersona implements PersonaEngine {
       max_tokens: 400,
     };
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30000);
       const resp = await fetch(url, {
         method: "POST",
         headers: {
@@ -68,7 +68,6 @@ export class ApiPersona implements PersonaEngine {
         body: JSON.stringify(body),
         signal: controller.signal,
       });
-      clearTimeout(timer);
 
       if (!resp.ok) {
         const t = await resp.text().catch(() => "");
@@ -82,6 +81,8 @@ export class ApiPersona implements PersonaEngine {
       log.warn(`人设层 API 调用失败，本轮降级为原始转述: ${(e as Error).message}`);
       const brief = input.workerText.replace(/\s+/g, " ").trim().slice(0, 200);
       return `（人设层 API 暂不可用）工作层结果：${brief}`;
+    } finally {
+      clearTimeout(timer);
     }
   }
 }

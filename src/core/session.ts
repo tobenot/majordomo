@@ -20,6 +20,7 @@ const log = createLogger("session");
 export class Session extends EventEmitter {
   private workerTextBuf: string[] = [];
   private currentUserText = "";
+  private turnFailed = false;
 
   constructor(
     public info: SessionInfo,
@@ -49,14 +50,26 @@ export class Session extends EventEmitter {
     this.store.appendHistory({ sessionId: this.info.id, ts: Date.now(), channel, text });
   }
 
+  private canAcceptInput(): boolean {
+    return this.info.state === "idle" || this.info.state === "error";
+  }
+
   async input(text: string): Promise<void> {
+    if (!this.canAcceptInput()) {
+      const message = `当前会话正处于 ${this.info.state}，请等本轮完成后再发送。`;
+      this.send({ type: "error", sessionId: this.info.id, message });
+      return;
+    }
+
     this.currentUserText = text;
     this.workerTextBuf = [];
+    this.turnFailed = false;
     this.record("user", text);
     this.setState("thinking");
     try {
       await this.worker.send(text);
     } catch (e) {
+      this.turnFailed = true;
       this.setState("error");
       this.send({ type: "error", sessionId: this.info.id, message: (e as Error).message });
     }
@@ -93,11 +106,17 @@ export class Session extends EventEmitter {
         break;
 
       case "done":
+        if (this.turnFailed) {
+          this.setState("error");
+          break;
+        }
         await this.report();
         break;
 
       case "error":
+        this.turnFailed = true;
         this.setState("error");
+        this.record("system", `ERROR: ${ev.message}`);
         this.send({ type: "error", sessionId: this.info.id, message: ev.message });
         break;
     }
