@@ -104,7 +104,7 @@ copy config.example.jsonc config.jsonc
 node dist/cli.js</code></pre>
         <p>进入后直接打字回车（无会话会自动新建），观察：</p>
         <ul class="check">
-          <li class="done">顶部出现 <code>已连接 · profile=home · 工作层=mock</code></li>
+          <li class="done">顶部出现 <code>已连接 · profile=claude · 工作层=mock</code></li>
           <li class="done">输入「<code>帮我看看代码</code>」→ 看到灰色 <b>工作层</b> 流式输出</li>
           <li class="done">随后看到紫色 <b>指挥官</b> 用猫娘口吻的人话汇报</li>
           <li class="done">输入含「<code>删除</code>」或「<code>rm</code>」→ 弹出黄色权限请求，问 <span class="kbd">y/n</span></li>
@@ -146,7 +146,7 @@ node dist/cli.js config
 # 切换活跃 profile（持久化到 ~/.majordomo/config.jsonc）
 node dist/cli.js profile internal</code></pre>
         <ul class="check">
-          <li><code>config</code> 打印出 home / internal / tclaude 三个 profile</li>
+          <li><code>config</code> 打印出 claude / internal / tclaude 三个 profile</li>
           <li><code>profile internal</code> 后再 <code>config</code>，<code>activeProfile</code> 变为 internal</li>
           <li>确认 internal 的 <code>personalDir</code> 是 <code>~/.claude-internal</code>（不是 <code>.claude</code>，这是关键坑）</li>
         </ul>

@@ -9,9 +9,9 @@
   // ── Profile：claude / claude-internal / tclaude 一键切换 ──
   // 关键坑：内网版个人规则目录是 .claude-internal（它自己会说成 .claude，那是错的）。
   // 切换 activeProfile 只影响"新开"的 session，已跑的不动。
-  "activeProfile": "home",
+  "activeProfile": "claude",
   "profiles": {
-    "home": {
+    "claude": {
       "command": "claude",
       "personalDir": "~/.claude"
     },

@@ -241,9 +241,9 @@ Claude Code 官方现在叫 **Agent SDK**（旧名就是 "headless mode"，`-p` 
 ```jsonc
 // 指挥官的配置
 {
-  "activeProfile": "home",
+  "activeProfile": "claude",
   "profiles": {
-    "home": {
+    "claude": {
       "command": "claude",
       "personalDir": "~/.claude"          // 全局 CLAUDE.md 在这
     },
@@ -406,9 +406,9 @@ Claude Code 官方现在叫 **Agent SDK**（旧名就是 "headless mode"，`-p` 
 
 ```jsonc
 {
-  "activeProfile": "home",
+  "activeProfile": "claude",
   "profiles": {
-    "home":     { "command": "claude",          "personalDir": "~/.claude" },
+    "claude":     { "command": "claude",          "personalDir": "~/.claude" },
     "internal": { "command": "claude-internal",  "personalDir": "~/.claude-internal" }
   }
 }

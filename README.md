@@ -75,7 +75,7 @@ PERSONA_MODEL=claude-3-5-haiku-latest
 
 | profile | 命令 | 个人规则目录 |
 |---|---|---|
-| home | `claude` | `~/.claude` |
+| claude | `claude` | `~/.claude` |
 | internal | `claude-internal` | `~/.claude-internal`（**注意不是 `.claude`**） |
 | tclaude | `tclaude` | `~/.tclaude` |
 

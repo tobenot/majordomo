@@ -42,9 +42,9 @@ export interface Config {
 export const DEFAULT_CONFIG: Config = {
   host: "127.0.0.1",
   port: 4317,
-  activeProfile: "home",
+  activeProfile: "claude",
   profiles: {
-    home: { command: "claude", personalDir: "~/.claude" },
+    claude: { command: "claude", personalDir: "~/.claude" },
     internal: { command: "claude-internal", personalDir: "~/.claude-internal" },
     tclaude: { command: "tclaude", personalDir: "~/.tclaude" },
   },
@@ -184,7 +184,7 @@ export function loadConfig(projectRoot: string = process.cwd()): LoadedConfig {
     log.warn(
       `activeProfile "${cfg.activeProfile}" 在 profiles 中不存在，回退到第一个可用 profile`
     );
-    cfg.activeProfile = Object.keys(cfg.profiles)[0] ?? "home";
+    cfg.activeProfile = Object.keys(cfg.profiles)[0] ?? "claude";
   }
   return { config: cfg, sources };
 }
