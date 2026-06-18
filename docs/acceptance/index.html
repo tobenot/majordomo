@@ -85,9 +85,9 @@ npm run doctor
 npm run selftest</code></pre>
         <p>产物在 <code>dist/</code>，Web 静态资源会自动拷到 <code>dist/web/public</code>。</p>
         <ul class="check">
-          <li>构建无报错，出现 <code>[copy-assets] web public -&gt; dist/web/public</code></li>
-          <li><code>doctor</code> 打印 Node / SDK / profile 命令 / Web 资源 / 通知脚本状态</li>
-          <li><code>selftest</code> 输出 <code>SELFTEST OK</code>，事件链包含 <code>permission_request</code> 和 <code>persona_message</code></li>
+          <li class="done">构建无报错，出现 <code>[copy-assets] web public -&gt; dist/web/public</code></li>
+          <li class="done"><code>doctor</code> 打印 Node / SDK / profile 命令 / Web 资源 / 通知脚本状态</li>
+          <li class="done"><code>selftest</code> 输出 <code>SELFTEST OK</code>，事件链包含 <code>permission_request</code> 和 <code>persona_message</code></li>
         </ul>
       </div>
 
@@ -128,13 +128,13 @@ node dist/cli.js</code></pre>
         <pre><code>node dist/cli.js web</code></pre>
         <p>浏览器打开提示的地址（默认 <code>http://127.0.0.1:4318</code>）：</p>
         <ul class="check">
-          <li>右上角连接状态变绿「已连接」，显示工作层引擎与 profile 下拉</li>
-          <li>左侧会话列表（与 TUI 同一份状态，TUI 里建的会话这里能看到）</li>
-          <li>左下角有「立绘 / CG」占位框（后续迭代填真图）</li>
-          <li>输入框发消息 → 我方蓝气泡、工作层灰气泡、指挥官紫气泡分明</li>
-          <li>触发权限 → 顶部黄条出现「批准 / 拒绝」按钮</li>
-          <li>切换 profile 下拉 → 提示「已切换（只影响新开会话）」</li>
-          <li>访问 <code>/healthz</code> 返回 JSON：<code>{ ok, web, assets, daemonWs }</code>，且不暴露本机绝对路径</li>
+          <li class="done">右上角连接状态变绿「已连接」，显示工作层引擎与 profile 下拉</li>
+          <li class="done">左侧会话列表（与 TUI 同一份状态，TUI 里建的会话这里能看到）</li>
+          <li class="done">左下角有「立绘 / CG」占位框（后续迭代填真图）</li>
+          <li class="done">输入框发消息 → 我方蓝气泡、工作层灰气泡、指挥官紫气泡分明</li>
+          <li class="done">触发权限 → 顶部黄条出现「批准 / 拒绝」按钮</li>
+          <li class="done">切换 profile 下拉 → 提示「已切换（只影响新开会话）」</li>
+          <li class="done">访问 <code>/healthz</code> 返回 JSON：<code>{ ok, web, assets, daemonWs }</code>，且不暴露本机绝对路径</li>
         </ul>
       </div>
 
@@ -146,9 +146,9 @@ node dist/cli.js config
 # 切换活跃 profile（持久化到 ~/.majordomo/config.jsonc）
 node dist/cli.js profile internal</code></pre>
         <ul class="check">
-          <li><code>config</code> 打印出 claude / internal / tclaude 三个 profile</li>
-          <li><code>profile internal</code> 后再 <code>config</code>，<code>activeProfile</code> 变为 internal</li>
-          <li>确认 internal 的 <code>personalDir</code> 是 <code>~/.claude-internal</code>（不是 <code>.claude</code>，这是关键坑）</li>
+          <li class="done"><code>config</code> 打印出 claude / internal / tclaude 三个 profile</li>
+          <li class="done"><code>profile internal</code> 后再 <code>config</code>，<code>activeProfile</code> 变为 internal</li>
+          <li class="done">确认 internal 的 <code>personalDir</code> 是 <code>~/.claude-internal</code>（不是 <code>.claude</code>，这是关键坑）</li>
         </ul>
       </div>
 
