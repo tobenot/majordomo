@@ -38,7 +38,7 @@ graph TD
   subgraph Worker["工作层（每会话一个）"]
     MOCK["MockWorker<br/>回显，开箱即跑"]
     SDK["SdkWorker<br/>@anthropic-ai/claude-agent-sdk<br/>常驻 streaming input"]
-    CC["ClaudeCodeWorker<br/>CLI fallback，--resume 续接"]
+    NOTE["无 CLI fallback<br/>SDK 不可用时只进 mock"]
   end
 
   subgraph Persona["人设层（嘴）"]
@@ -77,7 +77,7 @@ sequenceDiagram
   participant N as 通知 + 日记
 
   U->>C: user_input
-  C->>W: worker.send（prompt 走 stdin）
+  C->>W: worker.send（输入进 SDK 队列）
   W-->>C: 流式 text 事件（结构化）
   C-->>U: worker_message（原始，可看）
   opt 高危操作
@@ -96,12 +96,11 @@ sequenceDiagram
 ## 关键设计取舍
 
 - **Claude Code 接入以 Agent SDK 为准**：正式包是 `@anthropic-ai/claude-agent-sdk`。主路径使用 `query({ prompt: AsyncIterable<SDKUserMessage> })` 的 streaming input 模式；这既能常驻多轮，也能把 `/compact` 这类 slash command 当普通输入送入同一 session。
-- **SDK 是主实现，CLI 是兜底**：SDK 已经提供 `canUseTool` 权限回调、`auto` 权限模式、compact boundary、session resume 等能力；CLI fallback 仅用于 SDK 不可用时跑通基础任务，不再承诺交互权限和 compact。项目仍保留 `SDK -> CLI -> mock` 降级，保证诊断和演示链路可用。
-- **这不是为了支持 codex**：当前产品边界仍是 Claude Code 调度器。`WorkerEngine` 抽象只是在工程上隔离工作层实现，未来如果要接其他 agent 后端可以扩展，但不是这次 SDK 可选化的设计动机。
-- **工作层三段降级**：`auto` 优先 SDK；没有 SDK 就走 profile CLI；没有 CLI 就 mock，保证开箱即跑。
-- **工作层会话模型 = 常驻优先**（核心决策）：SDK Worker 用 streaming input 模式的 `query()`，传入一个受控 `AsyncIterable` 队列，进程全程不退、上下文在内存。这才是灵感文档说的"真连续"。`session_id` 仍持久化，但 `--resume` 退化为**崩溃恢复兜底**，不是日常每轮手段。CLI `-p` fallback 是无状态一次性兜底，明确不支持 compact / 交互权限。
+- **SDK 是唯一真实工作层**：SDK 已经提供 `canUseTool` 权限回调、`auto` 权限模式、compact boundary、session resume 等能力；不再保留 CLI fallback，避免用无状态一次性回合掩盖主工作流问题。
+- **这不是为了支持 codex**：当前产品边界仍是 Claude Code 调度器。`WorkerEngine` 抽象只是在工程上隔离真实工作层与 mock 演示层，未来如果要接其他 agent 后端可以扩展，但不是这次 SDK 可选化的设计动机。
+- **工作层两段降级**：`auto` 优先 SDK；没有 SDK 就 mock。mock 只用于无凭证环境验收 core / TUI / Web / persona / notifier 主链路，不承担真实任务。
+- **工作层会话模型 = 常驻优先**（核心决策）：SDK Worker 用 streaming input 模式的 `query()`，传入一个受控 `AsyncIterable` 队列，进程全程不退、上下文在内存。这才是灵感文档说的"真连续"。`session_id` 仍持久化，`resume` 只作为**崩溃恢复兜底**，不是日常每轮手段。
 - **`/compact` `/model` 透传在常驻 SDK 下天然生效**：作为普通用户消息喂进活着的 session 即可（SDK 官方支持 slash command 作为输入）；compact 返回 `SDKCompactBoundaryMessage`，Session 据此告知人设层。Auto-Compact 默认开启，多数时候无需手动。
-- **安全启动**：CLI prompt 走 stdin，不把用户文本拼进命令行；Windows 下优先 `shell=false`，仅 `.cmd/.bat` shim 走 `cmd.exe /d /s /c` fallback。
 - **自测与诊断**：`doctor` 检查 Node / SDK / profile 命令 / Web 资源 / 通知脚本；`selftest` 用临时 `MAJORDOMO_HOME` 隔离端到端验证。
 - **权限走 SDK 原生 `auto` + `canUseTool`**：默认 `permissionMode: "auto"`，沿用主人日常使用习惯，由 Claude Code 的模型分类器先判断；需要人工介入时，`canUseTool` 回调触发 → Session 转 `permission_request` 给前端 → 用户应答 → resolve `{behavior:'allow'|'deny'}`。`acceptEdits` 作为可选模式保留，但不是默认。**不需要 MCP permission-prompt-tool 重桥接**。
 - **profile 切换只影响新开会话**：已跑的会话绑死启动时的 profile；`activeProfile` 是用户级偏好，profile 命令写全局配置并覆盖项目示例值。坑：内网版个人目录是 `.claude-internal` 而非 `.claude`。

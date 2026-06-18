@@ -148,7 +148,7 @@ node dist/cli.js profile internal</code></pre>
 
       <div class="card">
         <h2><span class="num">5</span>接真实工作层（可选，需已登录 claude）</h2>
-        <p>把 <code>config.jsonc</code> 的 <code>worker.engine</code> 设回 <code>"auto"</code> 或 <code>"sdk"</code>。<code>"cli"</code> 只作为 SDK 不可用时的基础兜底。</p>
+        <p>把 <code>config.jsonc</code> 的 <code>worker.engine</code> 设回 <code>"auto"</code> 或 <code>"sdk"</code>。CLI fallback 已移除，真实工作流只走常驻 SDK。</p>
         <div class="note">
           正式 SDK 包名是 <code>@anthropic-ai/claude-agent-sdk</code>。SDK Worker 使用 streaming input 常驻会话，连续性在内存里保持；
           捕获到的 <code>session_id</code> 仍会持久化，主要用于崩溃后的 <code>resume</code> 兜底。
@@ -205,7 +205,7 @@ PERSONA_MODEL=claude-3-5-haiku-latest</code></pre>
       <div class="card warn">
         <h2><span class="num">!</span>当前已知限制</h2>
         <ul>
-          <li>CLI fallback 是一次性 headless 回合，只保证基础任务可运行；需要常驻上下文、<code>/compact</code>、交互权限时请使用 SDK worker。</li>
+          <li>CLI fallback 已移除；SDK 不可用时只降级到 mock，用于验收 core / TUI / Web / persona / notifier 主链路。</li>
           <li>文档层（另开 session 写验收文档）、立绘/CG 渲染、远程接入（CF Access / 推手机）均已留好架构口子，尚未实现。</li>
           <li>Windows 下已规避 Node <code>shell+args</code> 的 <code>DEP0190</code> 警告；如仍出现，优先看 <code>doctor</code> 输出。</li>
         </ul>

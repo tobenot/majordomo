@@ -8,7 +8,7 @@ import { runSelfTest } from "./core/selftest";
 import { runTui } from "./tui/client";
 import { startWebServer } from "./web/server";
 import { setVerbose, createLogger } from "./core/logger";
-import { getCommandVersion } from "./worker/claudeCodeWorker";
+import { getCommandVersion } from "./worker/commandUtils";
 import { isSdkResolvable, resolveEngineName, EngineChoice } from "./worker/factory";
 import { isSdkAvailable } from "./worker/sdkWorker";
 import { expandHome } from "./core/paths";
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
       rows.push(["Resolved engine", engine]);
       const sdkResolvable = isSdkResolvable();
       const sdkRuntime = sdkResolvable ? await isSdkAvailable() : false;
-      rows.push(["SDK package", sdkRuntime ? "import ok" : sdkResolvable ? "resolvable, import failed" : "not installed (CLI/mock fallback)"]);
+      rows.push(["SDK package", sdkRuntime ? "import ok" : sdkResolvable ? "resolvable, import failed" : "not installed (mock fallback)"]);
       for (const [name, profile] of Object.entries(config.profiles)) {
         const personalDir = expandHome(profile.personalDir);
         const rulesFile = path.join(personalDir, "CLAUDE.md");

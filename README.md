@@ -65,10 +65,8 @@ PERSONA_MODEL=claude-3-5-haiku-latest
 
 | engine | 作用 |
 |---|---|
-| `auto` | 优先 `@anthropic-ai/claude-agent-sdk` 常驻会话；没有 SDK 则走 profile CLI；再没有就 mock |
+| `auto` | 优先 `@anthropic-ai/claude-agent-sdk` 常驻会话；没有 SDK 则 mock |
 | `sdk` | 强制走 TypeScript Agent SDK 常驻会话 |
-| `cli` | 强制走 profile.command 的 Claude Code CLI fallback |
-| `claude` | `cli` 的兼容别名 |
 | `mock` | 回显引擎，无需任何凭证，用于验收整条链路 |
 
 支持 `maxTurns`、`timeoutMs`、`allowedTools`、`disallowedTools`。默认 `permissionMode: "auto"`，沿用 Claude Code 的 auto 分类器；需要人工介入时由 `canUseTool` 回调转发到 TUI / Web 权限确认。`acceptEdits` 仍可作为可选模式。
@@ -94,8 +92,7 @@ node dist/cli.js doctor
 正式 TypeScript Agent SDK 包名是 `@anthropic-ai/claude-agent-sdk`。主路径使用 `query({ prompt: AsyncIterable<SDKUserMessage> })` 的 streaming input 模式：每个 `SdkWorker` 持有一个常驻会话，多轮输入进入同一底层 session。
 
 1. SDK Worker：`auto` 优先使用常驻 Agent SDK，会保存 `session_id`；`/compact`、`/model` 作为普通输入透传给同一个 session。
-2. CLI fallback：用 `profile.command -p --output-format stream-json --resume <session_id>`，prompt 走 stdin，避免命令行注入；只作为 SDK 不可用时的基础兜底，不承诺 compact / 交互权限。
-3. Mock fallback：用于无凭证环境验收 core / TUI / Web / persona / notifier 主链路。
+2. 不保留 CLI fallback：主要工作流必须修好常驻 SDK；SDK 不可用时只降级到 mock，用于验收 core / TUI / Web / persona / notifier 主链路。
 
 真实权限 UI 走 SDK 原生 `canUseTool` 回调：默认 `permissionMode: "auto"`，分类器无法自动处理时才转给前端确认。
 
@@ -113,13 +110,13 @@ Web 面板启动后也有 `GET /healthz` 可做健康检查；返回 `web/assets
 
 ## Status
 
-🚧 v0.2 WIP。核心链路已跑通（TUI / Web / 会话池 / profile / 通知 / 日记 / mock + 常驻 SDK/CLI 工作层）。
+🚧 v0.2 WIP。核心链路已跑通（TUI / Web / 会话池 / profile / 通知 / 日记 / mock + 常驻 SDK 工作层）。
 未做：文档层、立绘渲染、远程接入（架构口子已留）。
 
 ## Roadmap
 
 - [x] core daemon + 会话池 + session_id 持久化
-- [x] worker：mock + 常驻 SDK + CLI fallback（`--resume` 崩溃恢复）
+- [x] worker：mock + 常驻 SDK（`session_id + resume` 崩溃恢复）
 - [x] 最小 TUI 跑通主链路（你输入 → 工作层 → 人设层汇报）
 - [x] Web 面板（会话列表 / 历史 / profile 切换 / healthz）
 - [x] 人设层（API + 离线模板）+ notifier（PowerShell / console）+ 日记

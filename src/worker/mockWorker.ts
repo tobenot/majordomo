@@ -48,7 +48,7 @@ export class MockWorker extends WorkerEngine {
         `收到指令：「${text}」。`,
         "（这是 MockWorker 回显引擎，未接真实 Claude Code。）",
         "已模拟分析需求、读取相关文件、给出方案。",
-        "回合完成。要接真实工作层，请安装并登录 claude 后把 config 的 worker.engine 设为 \"cli\" / \"sdk\" / \"auto\"。",
+        "回合完成。要接真实工作层，请安装并登录 Claude Code SDK 后把 config 的 worker.engine 设为 \"sdk\" / \"auto\"。",
       ];
 
       for (const c of chunks) {

@@ -16,11 +16,11 @@ export interface WorkerStartOptions {
   command: string;
   /** 权限模式 */
   permissionMode: string;
-  /** 单回合最大 turn 数，传给 SDK/CLI */
+  /** 单回合最大 turn 数，传给 SDK */
   maxTurns?: number;
   /** 单回合超时，避免真实工作层卡死 */
   timeoutMs?: number;
-  /** 允许/拒绝工具列表，遵循 Claude Code CLI/SDK 语义 */
+  /** 允许/拒绝工具列表，遵循 Claude Code SDK 语义 */
   allowedTools?: string[];
   disallowedTools?: string[];
   /** 续接的底层 session_id（如果是 resume） */
@@ -29,7 +29,7 @@ export interface WorkerStartOptions {
 
 /**
  * 工作层引擎接口。一个实例驱动一个连续会话。
- * 实现：MockWorker（回显）、SdkWorker（可选 TS SDK）、ClaudeCodeWorker（CLI fallback）。
+ * 实现：MockWorker（回显）、SdkWorker（TS Agent SDK）。
  */
 export abstract class WorkerEngine extends EventEmitter {
   abstract readonly engineName: string;

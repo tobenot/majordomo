@@ -30,12 +30,10 @@
   "permissionMode": "auto",
 
   // ── 工作层 worker ───────────────────────────────────────
-  // engine: "auto" | "sdk" | "cli" | "claude" | "mock"
-  //   auto  → 优先 @anthropic-ai/claude-agent-sdk 常驻会话；没有 SDK 则走 profile.command；再没有就 mock
-  //   sdk   → 强制走 TypeScript Agent SDK 常驻会话
-  //   cli   → 强制走 profile.command 的 Claude Code CLI
-  //   claude→ cli 的兼容别名
-  //   mock  → 回显引擎，无需任何凭证，用于演示整条链路
+  // engine: "auto" | "sdk" | "mock"
+  //   auto → 优先 @anthropic-ai/claude-agent-sdk 常驻会话；没有 SDK 则 mock
+  //   sdk  → 强制走 TypeScript Agent SDK 常驻会话
+  //   mock → 回显引擎，无需任何凭证，用于演示整条链路
   "worker": {
     "engine": "auto",
     "maxTurns": 8,

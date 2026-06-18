@@ -555,4 +555,4 @@ AGPL-3.0
 - `/compact`、`/model` 作为普通输入透传给同一个常驻 SDK session。
 - 默认权限模式保持 `auto`，需要人工介入时通过 SDK 原生 `canUseTool` 回调转发到 TUI / Web。
 - `acceptEdits` 仅保留为可选模式，不作为默认。
-- CLI fallback 只保证基础任务可运行，不承诺常驻上下文、compact 或交互权限。
+- CLI fallback 已移除；真实工作流必须走常驻 SDK，SDK 不可用时只降级到 mock 做链路验收。

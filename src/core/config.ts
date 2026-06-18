@@ -13,8 +13,8 @@ export interface Profile {
 }
 
 export interface WorkerConfig {
-  /** auto: SDK → CLI → mock；sdk: @anthropic-ai/claude-agent-sdk 常驻会话；cli/claude: 直接调 profile.command；mock: 回显 */
-  engine: "auto" | "sdk" | "cli" | "claude" | "mock";
+  /** auto: SDK → mock；sdk: @anthropic-ai/claude-agent-sdk 常驻会话；mock: 回显 */
+  engine: "auto" | "sdk" | "mock";
   maxTurns?: number;
   timeoutMs?: number;
   allowedTools?: string[];
@@ -55,7 +55,7 @@ export const DEFAULT_CONFIG: Config = {
   diaryDir: ".codebuddy/memory",
 };
 
-const WORKER_ENGINES = new Set(["auto", "sdk", "cli", "claude", "mock"]);
+const WORKER_ENGINES = new Set(["auto", "sdk", "mock"]);
 const PERSONA_MODES = new Set(["auto", "api", "template"]);
 
 /**
