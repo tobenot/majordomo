@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>majordomo 验收 Guide · 指挥官 v0.1</title>
+    <title>majordomo 验收 Guide · 指挥官 v0.2</title>
     <style>
       :root {
         --bg: #0e1016; --card: #161a26; --border: #2a3042;
@@ -62,13 +62,13 @@
   <body>
     <header>
       <h1>majordomo <span class="accent">· 指挥官</span> 验收 Guide</h1>
-      <p>v0.1 · Claude Code 多会话调度器 · 第三代 AI 工作流脚手架</p>
+      <p>v0.2 · Claude Code 常驻 SDK 会话 · 第三代 AI 工作流脚手架</p>
     </header>
 
     <div class="wrap">
       <div class="card good">
-        <strong>一句话结论：</strong>整条链路已跑通且自洽防御 —— 没装 claude、没配 API key 也能开箱即跑（自动降级 mock 工作层 + 离线模板人设层）。
-        网络调研后已补齐 SDK/CLI 双路线：<code>auto</code> 优先 SDK，其次 CLI，最后 mock。
+        <strong>一句话结论：</strong>整条链路已跑通且消除了伪功能 —— SDK 工作层现在是常驻 streaming-input 会话，<code>/compact</code>、<code>/model</code> 和真实权限确认都走同一底层 session。
+        验收管道仍可强制 mock；真实工作层默认 <code>permissionMode: "auto"</code>。
       </div>
 
       <div class="card">
@@ -88,8 +88,7 @@ npm run selftest</code></pre>
       <div class="card">
         <h2><span class="num">2</span>验收 TUI（开箱即跑，强烈建议先用 mock）</h2>
         <div class="note warn">
-          <code>auto</code> 会优先尝试真实 SDK/CLI。若本机装了真实 <code>claude</code> 但没登录，可能卡在工作层。
-          <b>验收管道本身请先强制 mock</b>：复制 <code>config.example.jsonc</code> 为 <code>config.jsonc</code>，把 <code>worker.engine</code> 改成 <code>"mock"</code>。
+          <code>auto</code> 会优先尝试真实 Agent SDK。若只是验收 UI / 协议管道，<b>请先强制 mock</b>：复制 <code>config.example.jsonc</code> 为 <code>config.jsonc</code>，把 <code>worker.engine</code> 改成 <code>"mock"</code>。
         </div>
         <pre><code># 复制配置并改 engine 为 mock（一次性）
 copy config.example.jsonc config.jsonc
@@ -112,6 +111,8 @@ node dist/cli.js</code></pre>
           <tr><td><code>/sessions</code> 或 <code>/ls</code></td><td>列出所有会话（报菜名）</td></tr>
           <tr><td><code>/resume &lt;id&gt;</code></td><td>续接历史会话</td></tr>
           <tr><td><code>/profile &lt;名&gt;</code></td><td>切换 profile（只影响新开会话）</td></tr>
+          <tr><td><code>/compact</code></td><td>透传给常驻 SDK session，手动压缩上下文</td></tr>
+          <tr><td><code>/model &lt;模型&gt;</code></td><td>透传给常驻 SDK session，切换后续模型</td></tr>
           <tr><td><code>/quit</code></td><td>退出</td></tr>
         </table>
       </div>
@@ -147,41 +148,53 @@ node dist/cli.js profile internal</code></pre>
 
       <div class="card">
         <h2><span class="num">5</span>接真实工作层（可选，需已登录 claude）</h2>
-        <p>把 <code>config.jsonc</code> 的 <code>worker.engine</code> 设回 <code>"auto"</code>、<code>"sdk"</code> 或 <code>"cli"</code>。</p>
+        <p>把 <code>config.jsonc</code> 的 <code>worker.engine</code> 设回 <code>"auto"</code> 或 <code>"sdk"</code>。<code>"cli"</code> 只作为 SDK 不可用时的基础兜底。</p>
         <div class="note">
-          网络调研结论：TypeScript SDK 包名是 <code>@anthropic-ai/claude-code</code>，公开主 API 是 <code>query()</code> async iterator；
-          CLI fallback 用 <code>claude -p --output-format stream-json --resume &lt;id&gt;</code>。
-          prompt 走 stdin（避免命令行注入），连续性靠捕获 <code>session_id</code> + <code>--resume</code>。
-          <code>permissionMode: "auto"</code> 暂时映射到更保守的 <code>default</code>，不是自动批准。
+          正式 SDK 包名是 <code>@anthropic-ai/claude-agent-sdk</code>。SDK Worker 使用 streaming input 常驻会话，连续性在内存里保持；
+          捕获到的 <code>session_id</code> 仍会持久化，主要用于崩溃后的 <code>resume</code> 兜底。
+          <code>permissionMode: "auto"</code> 保持原样交给 Claude Code 分类器；需要人工介入时由 <code>canUseTool</code> 回调转给 TUI / Web。
         </div>
-        <pre><code># 若要强制 SDK 路线，先安装官方包
-npm install @anthropic-ai/claude-code
-# config.jsonc: "engine": "sdk"</code></pre>
+        <pre><code># config.jsonc
+"permissionMode": "auto",
+"worker": { "engine": "sdk" }</code></pre>
         <ul class="check">
-          <li><code>doctor</code> 能看到 SDK 是否可解析、各 profile 命令是否可用</li>
-          <li>会话 engine 显示为 <code>sdk</code> 或 <code>cli</code></li>
+          <li><code>doctor</code> 显示 <code>SDK package : import ok</code>，Resolved engine 为 <code>sdk</code></li>
+          <li>会话 engine 显示为 <code>sdk</code></li>
           <li>真实回答经人设层润色后汇报；底层 session_id 被存下（<code>/sessions</code> 可见）</li>
+          <li>输入 <code>/compact</code> 后触发 SDK compact，并看到「上下文压缩」工作层消息</li>
+          <li>触发需人工确认的工具时，TUI / Web 出现权限确认；批准/拒绝会回传给同一 SDK session</li>
           <li>可配置 <code>maxTurns</code>、<code>timeoutMs</code>、<code>allowedTools</code>、<code>disallowedTools</code></li>
         </ul>
       </div>
 
       <div class="card">
         <h2><span class="num">6</span>接真实人设层 API（可选）</h2>
-        <p>复制 <code>.env.example</code> 为 <code>.env</code>，填 OpenAI 兼容接口的便宜模型：</p>
-        <pre><code>PERSONA_API_KEY=你的key
+        <p>复制 <code>.env.example</code> 为 <code>.env</code>，按接口类型选择 OpenAI-compatible 或 Anthropic Messages API：</p>
+        <pre><code># OpenAI-compatible /chat/completions
+PERSONA_API_FORMAT=openai
+PERSONA_API_KEY=你的key
 PERSONA_API_BASE=https://你的网关/v1
-PERSONA_MODEL=gpt-4o-mini</code></pre>
+PERSONA_MODEL=gpt-4o-mini
+
+# Anthropic Messages API /v1/messages
+PERSONA_API_FORMAT=anthropic
+PERSONA_API_KEY=你的key
+PERSONA_API_BASE=https://api.anthropic.com
+PERSONA_MODEL=claude-3-5-haiku-latest</code></pre>
         <ul class="check">
-          <li>启动日志出现「检测到人设层 API 配置，使用 API 模式」</li>
+          <li>OpenAI-compatible 启动日志出现「检测到人设层 API 配置，使用 openai 模式」</li>
+          <li>Anthropic 启动日志出现「检测到人设层 API 配置，使用 anthropic 模式」；官方接口可省略 <code>PERSONA_API_BASE</code></li>
           <li>汇报内容由真实模型生成（比离线模板更自然）；API 失败会自动降级转述，不会崩</li>
         </ul>
       </div>
+
 
       <div class="card">
         <h2><span class="num">7</span>回归测试要点（改动后重点验）</h2>
         <ul>
           <li><b>降级链路</b>：删掉 <code>config.jsonc</code> 和 <code>.env</code> 后仍能跑（mock + 模板）。</li>
-          <li><b>权限流程</b>：mock 下输入危险词必弹权限，批准/拒绝都要正确续行。</li>
+          <li><b>权限流程</b>：mock 下输入危险词必弹权限；SDK 下高危工具应由 <code>canUseTool</code> 转发给前端确认。</li>
+          <li><b>常驻连续性</b>：SDK 同一会话内连续追问应保留上下文，<code>/compact</code> 后再追问仍能接上。</li>
           <li><b>多会话隔离</b>：开两个会话交替输入，消息不串台（按 sessionId 路由）。</li>
           <li><b>状态一致</b>：TUI 建的会话，Web 刷新后能看到（同一 <code>~/.majordomo/sessions.json</code>）。</li>
           <li><b>profile 持久化</b>：切换后重启 daemon，activeProfile 保持。</li>
@@ -192,14 +205,14 @@ PERSONA_MODEL=gpt-4o-mini</code></pre>
       <div class="card warn">
         <h2><span class="num">!</span>当前已知限制</h2>
         <ul>
-          <li>真实工作层的<b>交互式权限确认</b>未接 —— 公开资料没有稳定 <code>canUseTool</code>，正确路线应是 <code>--permission-prompt-tool</code> + MCP 桥接 UI。<b>MockWorker 已完整演示该 UI 流程</b>。</li>
+          <li>CLI fallback 是一次性 headless 回合，只保证基础任务可运行；需要常驻上下文、<code>/compact</code>、交互权限时请使用 SDK worker。</li>
           <li>文档层（另开 session 写验收文档）、立绘/CG 渲染、远程接入（CF Access / 推手机）均已留好架构口子，尚未实现。</li>
           <li>Windows 下已规避 Node <code>shell+args</code> 的 <code>DEP0190</code> 警告；如仍出现，优先看 <code>doctor</code> 输出。</li>
         </ul>
       </div>
 
       <footer>
-        majordomo v0.1 · 验收文档优先写规则与流程，改参数无需维护本文 · 详见 <code>docs/architecture.md</code>
+        majordomo v0.2 · 验收文档优先写规则与流程，改参数无需维护本文 · 详见 <code>docs/architecture.md</code>
       </footer>
     </div>
   </body>

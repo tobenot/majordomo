@@ -491,10 +491,12 @@ Thumbs.db
 
 **`.env.example`**（提交，无真值）
 ```bash
+PERSONA_API_FORMAT=openai
 PERSONA_API_KEY=
 PERSONA_API_BASE=
 PERSONA_MODEL=
 ```
+
 
 **`config.example.jsonc`** —— 即上面第四节那段 profile 配置。
 
@@ -542,3 +544,15 @@ AGPL-3.0
 我已经建立了一个比较空的项目。你可以开始工作了，从头开始工作做一个长任务，你看到的那个规则就是第2代工作流，我尽量把第2代工作流的东西都放到了这个仓库里，以及全局的规则。
 
 有一点补充，还有一套配置是tclaude，指令就是这个，全局配置是.tclaude。我注意到interval被弃用了。一样的。
+
+# 当前正式决策（2026-06-18）
+
+这份灵感文档保留原始讨论脉络，不回改历史判断。当前落地以 `docs/architecture.md` 为准，关键决策如下：
+
+- 工作层主路径使用 `@anthropic-ai/claude-agent-sdk`。
+- `SdkWorker` 必须是常驻 streaming-input 会话，而不是每轮 `query()` 后退出。
+- `session_id + resume` 是崩溃恢复兜底，不是日常连续性的实现。
+- `/compact`、`/model` 作为普通输入透传给同一个常驻 SDK session。
+- 默认权限模式保持 `auto`，需要人工介入时通过 SDK 原生 `canUseTool` 回调转发到 TUI / Web。
+- `acceptEdits` 仅保留为可选模式，不作为默认。
+- CLI fallback 只保证基础任务可运行，不承诺常驻上下文、compact 或交互权限。

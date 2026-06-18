@@ -27,9 +27,10 @@ export function createPersona(cfg: PersonaConfig): PersonaEngine {
 
   // auto
   if (api) {
-    log.info("检测到人设层 API 配置，使用 API 模式");
+    log.info(`检测到人设层 API 配置，使用 ${api.apiFormat} 模式`);
     return api;
   }
+
   log.info("未检测到人设层 API 配置，使用离线模板（开箱即跑）");
   return new TemplatePersona(cfg.name);
 }

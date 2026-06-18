@@ -25,14 +25,14 @@
     }
   },
 
-  // 工作层权限模式：MCP 权限桥接完成前，auto 会按更保守的 default 处理；
-  // 如果你明确想让 Claude Code 自动接受编辑类操作，可改成 "acceptEdits"。
+  // 工作层权限模式：默认使用 Claude Code 的 auto 分类器；需要人工介入时走前端权限确认。
+  // 可选："default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"。
   "permissionMode": "auto",
 
   // ── 工作层 worker ───────────────────────────────────────
   // engine: "auto" | "sdk" | "cli" | "claude" | "mock"
-  //   auto  → 优先 @anthropic-ai/claude-code SDK；没有 SDK 则走 profile.command；再没有就 mock
-  //   sdk   → 强制走 TypeScript SDK（需自行 npm install @anthropic-ai/claude-code）
+  //   auto  → 优先 @anthropic-ai/claude-agent-sdk 常驻会话；没有 SDK 则走 profile.command；再没有就 mock
+  //   sdk   → 强制走 TypeScript Agent SDK 常驻会话
   //   cli   → 强制走 profile.command 的 Claude Code CLI
   //   claude→ cli 的兼容别名
   //   mock  → 回显引擎，无需任何凭证，用于演示整条链路
@@ -47,9 +47,10 @@
   // ── 人设层 persona ──────────────────────────────────────
   // mode: "auto" | "api" | "template"
   //   auto    → 有 API key 走 api，否则走离线模板
-  //   api     → OpenAI-compatible / Anthropic 兼容接口（密钥放 .env）
+  //   api     → OpenAI-compatible / Anthropic Messages API（密钥放 .env）
   //   template→ 离线模板，无需密钥
-  // 具体密钥/base/model 放 .env，不写进配置文件。
+  // 具体 PERSONA_API_FORMAT/key/base/model 放 .env，不写进配置文件。
+
   "persona": {
     "mode": "auto",
     "name": "指挥官",

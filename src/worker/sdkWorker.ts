@@ -1,94 +1,195 @@
+import type {
+  CanUseTool,
+  Options,
+  PermissionMode,
+  PermissionResult,
+  Query,
+  SDKMessage,
+  SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
+import { randomUUID } from "crypto";
 import { WorkerEngine } from "./types";
 import { createLogger } from "../core/logger";
+import { resolveCommandPath } from "./commandUtils";
 
 const log = createLogger("worker:sdk");
 
-type QueryFn = (args: any) => AsyncIterable<any>;
+type QueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => Query;
 
 /**
- * Claude Code TypeScript SDK 工作层（可选）。
+ * Claude Agent SDK 工作层。
  *
- * 网络调研结论：当前公开文档的 TypeScript SDK 包是 `@anthropic-ai/claude-code`，
- * 主 API 是 `query()` async iterator；没有稳定公开的 `ClaudeSDKClient/canUseTool`。
- * 因此这里做"可用则用"的防御式接入，不把该包作为硬依赖。
+ * 正式路径使用 streaming input：每个 SdkWorker 持有一个活着的 query()，
+ * 多轮输入通过 AsyncIterable 队列送入同一底层 session。`--resume` 只作为崩溃恢复兜底。
  */
 export class SdkWorker extends WorkerEngine {
   readonly engineName = "sdk";
+  private input?: SdkInputQueue;
+  private query?: Query;
   private abort?: AbortController;
-  private running = false;
+  private closed = false;
+  private currentTurn?: PendingTurn;
+  private pendingPermissions = new Map<string, (approve: boolean) => void>();
+  private turnHadText = false;
 
   async send(text: string): Promise<void> {
-    if (this.running) {
+    if (this.currentTurn) {
       this.emitEvent({ kind: "error", message: "上一个 SDK 回合尚未结束" });
       return;
     }
-    this.running = true;
-    this.abort = new AbortController();
-    let timer: NodeJS.Timeout | undefined;
 
-    try {
-      const query = await loadQuery();
-      const options: any = {
-        permissionMode: mapPermissionMode(this.opts.permissionMode),
-      };
-      if (this.opts.maxTurns) options.maxTurns = this.opts.maxTurns;
-      if (this.opts.allowedTools?.length) options.allowedTools = this.opts.allowedTools;
-      if (this.opts.disallowedTools?.length) options.disallowedTools = this.opts.disallowedTools;
-      if (this.workerSessionId) options.resume = this.workerSessionId;
+    await this.startIfNeeded();
 
-      if (this.opts.timeoutMs) {
-        timer = setTimeout(() => this.abort?.abort(), this.opts.timeoutMs);
+    return new Promise<void>((resolve) => {
+      const turn: PendingTurn = { resolve };
+      if (this.opts.timeoutMs && this.opts.timeoutMs > 0) {
+        turn.timer = setTimeout(() => {
+          this.emitEvent({ kind: "error", message: `SDK 工作层超时（${this.opts.timeoutMs}ms），已中断本轮` });
+          void this.query?.interrupt().catch((e) => log.warn(`SDK interrupt 失败: ${(e as Error).message}`));
+          this.finishTurn();
+        }, this.opts.timeoutMs);
       }
-
-      for await (const msg of query({
-        prompt: text,
-        cwd: this.opts.cwd,
-        abortController: this.abort,
-        options,
-      })) {
-        this.handleSdkMessage(msg);
-      }
-    } catch (e) {
-      this.emitEvent({ kind: "error", message: `SDK 工作层失败: ${(e as Error).message}` });
-    } finally {
-      if (timer) clearTimeout(timer);
-      this.running = false;
-      this.abort = undefined;
-      this.emitEvent({ kind: "done" });
-    }
+      this.currentTurn = turn;
+      this.turnHadText = false;
+      this.input!.push(toUserMessage(text));
+    });
   }
 
-  resolvePermission(_requestId: string, _approve: boolean): void {
-    // 公开 TS SDK 文档没有 canUseTool；真实交互权限后续走 MCP permission-prompt-tool。
+  resolvePermission(requestId: string, approve: boolean): void {
+    const resolve = this.pendingPermissions.get(requestId);
+    if (!resolve) return;
+    this.pendingPermissions.delete(requestId);
+    resolve(approve);
   }
 
   async close(): Promise<void> {
+    this.closed = true;
+    this.input?.close();
+    this.query?.close();
     this.abort?.abort();
-    this.running = false;
+    for (const [id, resolve] of this.pendingPermissions) {
+      this.pendingPermissions.delete(id);
+      resolve(false);
+    }
+    this.finishTurn(false);
   }
 
-  private handleSdkMessage(obj: any): void {
-    if (!obj || typeof obj !== "object") return;
-    if (obj.session_id && obj.session_id !== this.workerSessionId) {
-      this.workerSessionId = obj.session_id;
-      this.emitEvent({ kind: "session_id", id: obj.session_id });
+  private async startIfNeeded(): Promise<void> {
+    if (this.query) return;
+
+    const query = await loadQuery();
+    this.input = new SdkInputQueue();
+    this.abort = new AbortController();
+    this.query = query({ prompt: this.input, options: this.buildOptions() });
+    void this.pump(this.query);
+  }
+
+  private buildOptions(): Options {
+    const options: Options = {
+      cwd: this.opts.cwd,
+      permissionMode: mapPermissionMode(this.opts.permissionMode),
+      canUseTool: this.canUseTool,
+      abortController: this.abort,
+      settingSources: ["user", "project", "local"],
+    };
+    if (this.opts.maxTurns) options.maxTurns = this.opts.maxTurns;
+    if (this.opts.allowedTools?.length) options.allowedTools = this.opts.allowedTools;
+    if (this.opts.disallowedTools?.length) options.disallowedTools = this.opts.disallowedTools;
+    if (this.workerSessionId) options.resume = this.workerSessionId;
+
+    const executable = resolveCommandPath(this.opts.command);
+    if (executable) options.pathToClaudeCodeExecutable = executable;
+
+    return options;
+  }
+
+  private readonly canUseTool: CanUseTool = async (toolName, input, options): Promise<PermissionResult> => {
+    const requestId = options.toolUseID || randomUUID();
+    const detail = formatPermissionDetail(toolName, input, options);
+    this.emitEvent({ kind: "permission", requestId, tool: toolName, detail });
+
+    const approve = await waitForPermission(this.pendingPermissions, requestId, options.signal);
+    if (approve) {
+      return { behavior: "allow", updatedInput: input };
     }
+    return {
+      behavior: "deny",
+      message: `User denied permission to use ${toolName}.`,
+      toolUseID: options.toolUseID,
+    };
+  };
+
+  private async pump(query: Query): Promise<void> {
+    try {
+      for await (const msg of query) {
+        this.handleSdkMessage(msg);
+      }
+      if (!this.closed) {
+        this.emitEvent({ kind: "error", message: "SDK 工作层会话已结束" });
+      }
+    } catch (e) {
+      if (!this.closed) {
+        this.emitEvent({ kind: "error", message: `SDK 工作层失败: ${(e as Error).message}` });
+      }
+    } finally {
+      this.query = undefined;
+      this.input?.close();
+      this.input = undefined;
+      this.abort = undefined;
+      this.finishTurn();
+    }
+  }
+
+  private handleSdkMessage(obj: SDKMessage): void {
+    if (!obj || typeof obj !== "object") return;
+    const sessionId = (obj as { session_id?: string }).session_id;
+    if (sessionId && sessionId !== this.workerSessionId) {
+      this.workerSessionId = sessionId;
+      this.emitEvent({ kind: "session_id", id: sessionId });
+    }
+
     switch (obj.type) {
       case "system":
-        if (obj.subtype === "init") {
-          log.debug(`SDK init model=${obj.model ?? "?"} permission=${obj.permissionMode ?? "?"}`);
-        }
+        this.handleSystemMessage(obj);
         break;
       case "assistant":
         this.emitAssistantContent(obj.message?.content ?? []);
         break;
       case "result":
-        if (obj.subtype && obj.subtype !== "success") {
+        if (obj.subtype !== "success") {
           this.emitEvent({ kind: "error", message: `SDK result ${obj.subtype}` });
+        } else if (obj.result?.trim() && !this.turnHadText) {
+          this.emitText(obj.result);
         }
-        if (typeof obj.result === "string" && obj.result.trim()) {
-          this.emitEvent({ kind: "text", text: obj.result });
-        }
+        this.finishTurn();
+        break;
+      case "tool_use_summary":
+        this.emitText(`[工具摘要] ${obj.summary}`);
+        break;
+      case "auth_status":
+        if (obj.output.length) this.emitText(`[认证] ${obj.output.join("\n")}`);
+        if (obj.error) this.emitEvent({ kind: "error", message: obj.error });
+        break;
+      default:
+        break;
+    }
+  }
+
+  private handleSystemMessage(obj: Extract<SDKMessage, { type: "system" }>): void {
+    switch (obj.subtype) {
+      case "init":
+        log.debug(`SDK init session=${obj.session_id ?? "?"}`);
+        break;
+      case "compact_boundary":
+        this.emitText(
+          `[上下文压缩] ${obj.compact_metadata.trigger} compact: ${obj.compact_metadata.pre_tokens} → ${obj.compact_metadata.post_tokens ?? "?"} tokens`
+        );
+        break;
+      case "permission_denied":
+        this.emitText(`[权限拒绝] ${obj.tool_name}: ${obj.message}`);
+        break;
+      case "notification":
+        this.emitText(`[通知] ${obj.text}`);
         break;
       default:
         break;
@@ -98,11 +199,107 @@ export class SdkWorker extends WorkerEngine {
   private emitAssistantContent(content: any[]): void {
     for (const block of content) {
       if (block?.type === "text" && block.text) {
-        this.emitEvent({ kind: "text", text: block.text });
+        this.emitText(block.text);
       } else if (block?.type === "tool_use") {
-        this.emitEvent({ kind: "text", text: `[工具调用] ${block.name ?? "?"}` });
+        this.emitText(`[工具调用] ${block.name ?? "?"}`);
       }
     }
+  }
+
+  private emitText(text: string): void {
+    this.turnHadText = true;
+    this.emitEvent({ kind: "text", text });
+  }
+
+  private finishTurn(emitDone = true): void {
+    const turn = this.currentTurn;
+    if (!turn) return;
+    if (turn.timer) clearTimeout(turn.timer);
+    this.currentTurn = undefined;
+    if (emitDone) this.emitEvent({ kind: "done" });
+    turn.resolve();
+  }
+}
+
+class SdkInputQueue implements AsyncIterable<SDKUserMessage>, AsyncIterator<SDKUserMessage> {
+  private items: SDKUserMessage[] = [];
+  private waiters: Array<(value: IteratorResult<SDKUserMessage>) => void> = [];
+  private isClosed = false;
+
+  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
+    return this;
+  }
+
+  next(): Promise<IteratorResult<SDKUserMessage>> {
+    const item = this.items.shift();
+    if (item) return Promise.resolve({ value: item, done: false });
+    if (this.isClosed) return Promise.resolve({ value: undefined, done: true });
+    return new Promise((resolve) => this.waiters.push(resolve));
+  }
+
+  push(item: SDKUserMessage): void {
+    if (this.isClosed) throw new Error("SDK input queue is closed");
+    const waiter = this.waiters.shift();
+    if (waiter) waiter({ value: item, done: false });
+    else this.items.push(item);
+  }
+
+  close(): void {
+    if (this.isClosed) return;
+    this.isClosed = true;
+    for (const waiter of this.waiters.splice(0)) {
+      waiter({ value: undefined, done: true });
+    }
+  }
+}
+
+interface PendingTurn {
+  resolve: () => void;
+  timer?: NodeJS.Timeout;
+}
+
+function toUserMessage(text: string): SDKUserMessage {
+  return {
+    type: "user",
+    message: { role: "user", content: text },
+    parent_tool_use_id: null,
+    origin: { kind: "human" },
+    shouldQuery: true,
+  };
+}
+
+async function waitForPermission(
+  pending: Map<string, (approve: boolean) => void>,
+  requestId: string,
+  signal: AbortSignal
+): Promise<boolean> {
+  if (signal.aborted) return false;
+  return new Promise<boolean>((resolve) => {
+    const done = (approve: boolean) => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(approve);
+    };
+    const onAbort = () => {
+      pending.delete(requestId);
+      done(false);
+    };
+    pending.set(requestId, done);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function formatPermissionDetail(toolName: string, input: Record<string, unknown>, options: Parameters<CanUseTool>[2]): string {
+  const lines = [options.title, options.description, options.decisionReason]
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  if (lines.length) return lines.join("\n");
+  return `${toolName}: ${safeJson(input)}`;
+}
+
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value).slice(0, 800);
+  } catch {
+    return String(value).slice(0, 800);
   }
 }
 
@@ -118,15 +315,24 @@ export async function isSdkAvailable(): Promise<boolean> {
 async function loadQuery(): Promise<QueryFn> {
   const dynamicImport = new Function("specifier", "return import(specifier)") as (
     specifier: string
-  ) => Promise<any>;
-  const mod = await dynamicImport("@anthropic-ai/claude-code");
+  ) => Promise<typeof import("@anthropic-ai/claude-agent-sdk")>;
+  const mod = await dynamicImport("@anthropic-ai/claude-agent-sdk");
   if (typeof mod.query !== "function") {
-    throw new Error("@anthropic-ai/claude-code 未导出 query()；请检查版本");
+    throw new Error("@anthropic-ai/claude-agent-sdk 未导出 query()；请检查版本");
   }
   return mod.query as QueryFn;
 }
 
-function mapPermissionMode(mode: string): string {
-  // MCP permission bridge 尚未接入前，auto 采用更保守的 default，而不是 acceptEdits。
-  return mode === "auto" ? "default" : mode;
+function mapPermissionMode(mode: string): PermissionMode {
+  switch (mode) {
+    case "default":
+    case "acceptEdits":
+    case "bypassPermissions":
+    case "plan":
+    case "dontAsk":
+    case "auto":
+      return mode;
+    default:
+      return "auto";
+  }
 }

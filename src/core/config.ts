@@ -13,7 +13,7 @@ export interface Profile {
 }
 
 export interface WorkerConfig {
-  /** auto: SDK → CLI → mock；sdk: 可选 @anthropic-ai/claude-code；cli/claude: 直接调 profile.command；mock: 回显 */
+  /** auto: SDK → CLI → mock；sdk: @anthropic-ai/claude-agent-sdk 常驻会话；cli/claude: 直接调 profile.command；mock: 回显 */
   engine: "auto" | "sdk" | "cli" | "claude" | "mock";
   maxTurns?: number;
   timeoutMs?: number;

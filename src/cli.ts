@@ -165,7 +165,7 @@ async function main(): Promise<void> {
         rows.push([`Profile ${name}`, getCommandVersion(profile.command) ?? `command not found: ${profile.command}`]);
         rows.push([`Rules ${name}`, fs.existsSync(rulesFile) ? `found ${rulesFile}` : `not found ${rulesFile}`]);
       }
-      rows.push(["Permission", config.permissionMode === "auto" ? "auto -> default (MCP permission bridge not implemented)" : config.permissionMode]);
+      rows.push(["Permission", config.permissionMode === "auto" ? "auto (SDK classifier + canUseTool fallback)" : config.permissionMode]);
       rows.push(["Web assets", fs.existsSync(path.join(__dirname, "web", "public", "index.html")) ? "dist ok" : "missing (run npm run build)"]);
       rows.push(["Notify script", fs.existsSync(path.join(root, "tools", "notify-done", "notify-done.ps1")) ? "found" : "missing"]);
       const w = Math.max(...rows.map((r) => r[0].length));

@@ -8,10 +8,9 @@ const log = createLogger("worker:cli");
 /**
  * 真实 Claude Code CLI 工作层。
  *
- * 网络调研后校正：公开资料确认 CLI 支持 `--output-format stream-json`、
- * `--input-format stream-json`、`--permission-mode`、`--resume <session_id>`，
- * 且 TypeScript SDK 的公开主 API 是 query()，并没有稳定公开的 ClaudeSDKClient/canUseTool。
- * 因此本 CLI Worker 作为稳定 fallback：prompt 走 stdin，输出逐行解析 stream-json。
+ * CLI 支持 `--output-format stream-json`、`--permission-mode`、`--resume <session_id>`。
+ * 本实现作为 SDK 不可用时的 fallback：prompt 走 stdin，输出逐行解析 stream-json。
+ * 交互权限与 compact 由常驻 SDK Worker 承担；CLI fallback 只保证基础任务可运行。
  */
 export class ClaudeCodeWorker extends WorkerEngine {
   readonly engineName = "cli";
@@ -149,7 +148,7 @@ export class ClaudeCodeWorker extends WorkerEngine {
   }
 
   resolvePermission(_requestId: string, _approve: boolean): void {
-    // CLI 一次性回合下不产生 UI 交互式权限；后续通过 MCP permission-prompt-tool 桥接。
+    // CLI fallback 是一次性 headless 回合，不承诺交互权限；真实权限 UI 走 SdkWorker。
   }
 
   async close(): Promise<void> {
@@ -165,15 +164,14 @@ export class ClaudeCodeWorker extends WorkerEngine {
 function mapPermissionMode(mode: string): string | null {
   switch (mode) {
     case "auto":
-      // MCP permission bridge 尚未接入前，auto 采用更保守的 default，而不是 acceptEdits。
-      return "default";
     case "default":
     case "acceptEdits":
     case "bypassPermissions":
     case "plan":
+    case "dontAsk":
       return mode;
     default:
-      return "acceptEdits";
+      return "auto";
   }
 }
 
