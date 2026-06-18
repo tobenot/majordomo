@@ -68,23 +68,27 @@
     <div class="wrap">
       <div class="card good">
         <strong>一句话结论：</strong>整条链路已跑通且自洽防御 —— 没装 claude、没配 API key 也能开箱即跑（自动降级 mock 工作层 + 离线模板人设层）。
-        本机检测到真实 <code>claude</code>，<code>auto</code> 模式会优先用它（需已登录）。
+        网络调研后已补齐 SDK/CLI 双路线：<code>auto</code> 优先 SDK，其次 CLI，最后 mock。
       </div>
 
       <div class="card">
         <h2><span class="num">1</span>构建</h2>
         <p>在项目根目录执行（已装好依赖；若没装先 <code>npm install</code>）：</p>
-        <pre><code>npm run build</code></pre>
+        <pre><code>npm run build
+npm run doctor
+npm run selftest</code></pre>
         <p>产物在 <code>dist/</code>，Web 静态资源会自动拷到 <code>dist/web/public</code>。</p>
         <ul class="check">
           <li>构建无报错，出现 <code>[copy-assets] web public -&gt; dist/web/public</code></li>
+          <li><code>doctor</code> 打印 Node / SDK / profile 命令 / Web 资源 / 通知脚本状态</li>
+          <li><code>selftest</code> 输出 <code>SELFTEST OK</code>，事件链包含 <code>permission_request</code> 和 <code>persona_message</code></li>
         </ul>
       </div>
 
       <div class="card">
         <h2><span class="num">2</span>验收 TUI（开箱即跑，强烈建议先用 mock）</h2>
         <div class="note warn">
-          本机装了真实 <code>claude</code>，<code>auto</code> 会去调它并可能因登录/交互而卡住。
+          <code>auto</code> 会优先尝试真实 SDK/CLI。若本机装了真实 <code>claude</code> 但没登录，可能卡在工作层。
           <b>验收管道本身请先强制 mock</b>：复制 <code>config.example.jsonc</code> 为 <code>config.jsonc</code>，把 <code>worker.engine</code> 改成 <code>"mock"</code>。
         </div>
         <pre><code># 复制配置并改 engine 为 mock（一次性）
@@ -123,6 +127,7 @@ node dist/cli.js</code></pre>
           <li>输入框发消息 → 我方蓝气泡、工作层灰气泡、指挥官紫气泡分明</li>
           <li>触发权限 → 顶部黄条出现「批准 / 拒绝」按钮</li>
           <li>切换 profile 下拉 → 提示「已切换（只影响新开会话）」</li>
+          <li>访问 <code>/healthz</code> 返回 JSON：<code>{ ok: true, wsUrl, publicDir }</code></li>
         </ul>
       </div>
 
@@ -142,15 +147,20 @@ node dist/cli.js profile internal</code></pre>
 
       <div class="card">
         <h2><span class="num">5</span>接真实工作层（可选，需已登录 claude）</h2>
-        <p>把 <code>config.jsonc</code> 的 <code>worker.engine</code> 设回 <code>"auto"</code> 或 <code>"claude"</code>。</p>
+        <p>把 <code>config.jsonc</code> 的 <code>worker.engine</code> 设回 <code>"auto"</code>、<code>"sdk"</code> 或 <code>"cli"</code>。</p>
         <div class="note">
-          实现说明：真实引擎用 <code>claude -p --output-format stream-json --resume &lt;id&gt;</code>，
-          prompt 走 stdin（避免命令行注入）。连续性靠捕获 <code>session_id</code> + <code>--resume</code>，
-          不依赖不可靠的 <code>--continue</code>。
+          网络调研结论：TypeScript SDK 包名是 <code>@anthropic-ai/claude-code</code>，公开主 API 是 <code>query()</code> async iterator；
+          CLI fallback 用 <code>claude -p --output-format stream-json --resume &lt;id&gt;</code>。
+          prompt 走 stdin（避免命令行注入），连续性靠捕获 <code>session_id</code> + <code>--resume</code>。
         </div>
+        <pre><code># 若要强制 SDK 路线，先安装官方包
+npm install @anthropic-ai/claude-code
+# config.jsonc: "engine": "sdk"</code></pre>
         <ul class="check">
-          <li>会话 engine 显示为 <code>claude</code></li>
+          <li><code>doctor</code> 能看到 SDK 是否可解析、各 profile 命令是否可用</li>
+          <li>会话 engine 显示为 <code>sdk</code> 或 <code>cli</code></li>
           <li>真实回答经人设层润色后汇报；底层 session_id 被存下（<code>/sessions</code> 可见）</li>
+          <li>可配置 <code>maxTurns</code>、<code>timeoutMs</code>、<code>allowedTools</code>、<code>disallowedTools</code></li>
         </ul>
       </div>
 
@@ -181,9 +191,9 @@ PERSONA_MODEL=gpt-4o-mini</code></pre>
       <div class="card warn">
         <h2><span class="num">!</span>当前已知限制</h2>
         <ul>
-          <li>真实工作层的<b>交互式权限确认</b>（canUseTool 双向通道）未接 —— 需 SDK 的 stream-json 输入；当前 headless 一次性回合 + acceptEdits 不产生交互权限。<b>MockWorker 已完整演示该 UI 流程</b>，接 SDK 后即可对接真实权限。</li>
+          <li>真实工作层的<b>交互式权限确认</b>未接 —— 公开资料没有稳定 <code>canUseTool</code>，正确路线应是 <code>--permission-prompt-tool</code> + MCP 桥接 UI。<b>MockWorker 已完整演示该 UI 流程</b>。</li>
           <li>文档层（另开 session 写验收文档）、立绘/CG 渲染、远程接入（CF Access / 推手机）均已留好架构口子，尚未实现。</li>
-          <li>Windows 上探测 <code>claude --version</code> 会有一条 Node <code>DEP0190</code> shell 弃用警告，不影响功能。</li>
+          <li>Windows 下已规避 Node <code>shell+args</code> 的 <code>DEP0190</code> 警告；如仍出现，优先看 <code>doctor</code> 输出。</li>
         </ul>
       </div>
 

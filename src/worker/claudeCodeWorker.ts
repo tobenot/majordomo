@@ -1,26 +1,22 @@
-import { spawn, spawnSync, ChildProcessWithoutNullStreams } from "child_process";
+import { ChildProcessWithoutNullStreams } from "child_process";
 import { WorkerEngine, WorkerStartOptions } from "./types";
 import { createLogger } from "../core/logger";
+import { isCommandAvailable, spawnCommand, spawnCommandSync } from "./commandUtils";
 
-const log = createLogger("worker:claude");
+const log = createLogger("worker:cli");
 
 /**
- * 真实 Claude Code 工作层。
+ * 真实 Claude Code CLI 工作层。
  *
- * 实现取舍（见 docs/design/main-mind.md 的"连续 session"讨论）：
- * - 用 `--resume <session_id>` 保持连续性，而不是依赖不可靠的 `--continue`。
- *   每个回合 spawn 一个新进程，带上次捕获的 session_id 续接。
- * - prompt 走 stdin（`-p` 不带参数时从 stdin 读），彻底避免把用户文本拼进命令行
- *   带来的注入/转义问题（Windows 上尤其重要）。
- * - 输出用 `--output-format stream-json --verbose`，逐行解析结构化事件。
- *
- * 已知限制：headless 一次性回合 + acceptEdits 下不会产生交互式权限请求；
- * 真正的 canUseTool 双向确认需要 SDK 的 stream-json 输入通道，留待后续接入。
- * 这是当前唯一未做的能力，已在验收文档标注。
+ * 网络调研后校正：公开资料确认 CLI 支持 `--output-format stream-json`、
+ * `--input-format stream-json`、`--permission-mode`、`--resume <session_id>`，
+ * 且 TypeScript SDK 的公开主 API 是 query()，并没有稳定公开的 ClaudeSDKClient/canUseTool。
+ * 因此本 CLI Worker 作为稳定 fallback：prompt 走 stdin，输出逐行解析 stream-json。
  */
 export class ClaudeCodeWorker extends WorkerEngine {
-  readonly engineName = "claude";
+  readonly engineName = "cli";
   private child?: ChildProcessWithoutNullStreams;
+  private timer?: NodeJS.Timeout;
 
   async send(text: string): Promise<void> {
     if (this.child) {
@@ -31,28 +27,36 @@ export class ClaudeCodeWorker extends WorkerEngine {
     const args = ["-p", "--output-format", "stream-json", "--verbose"];
     const mode = mapPermissionMode(this.opts.permissionMode);
     if (mode) args.push("--permission-mode", mode);
+    if (this.opts.maxTurns) args.push("--max-turns", String(this.opts.maxTurns));
+    if (this.opts.allowedTools?.length) args.push("--allowedTools", this.opts.allowedTools.join(","));
+    if (this.opts.disallowedTools?.length)
+      args.push("--disallowedTools", this.opts.disallowedTools.join(","));
     if (this.workerSessionId) args.push("--resume", this.workerSessionId);
 
     log.debug(`spawn ${this.opts.command} ${args.join(" ")} (cwd=${this.opts.cwd})`);
 
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(this.opts.command, args, {
-        cwd: this.opts.cwd,
-        shell: process.platform === "win32",
-      });
+      child = spawnCommand(this.opts.command, args, { cwd: this.opts.cwd });
     } catch (e) {
       this.emitEvent({ kind: "error", message: `无法启动工作层: ${(e as Error).message}` });
       return;
     }
     this.child = child;
 
-    // prompt 走 stdin，避免命令行注入
+    if (this.opts.timeoutMs && this.opts.timeoutMs > 0) {
+      this.timer = setTimeout(() => {
+        this.emitEvent({ kind: "error", message: `工作层超时（${this.opts.timeoutMs}ms），已终止` });
+        this.child?.kill();
+      }, this.opts.timeoutMs);
+    }
+
     child.stdin.write(text);
     child.stdin.end();
 
     let buf = "";
     let stderr = "";
+    let sawResult = false;
 
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (d: string) => {
@@ -61,7 +65,10 @@ export class ClaudeCodeWorker extends WorkerEngine {
       while ((idx = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, idx).trim();
         buf = buf.slice(idx + 1);
-        if (line) this.handleLine(line);
+        if (line) {
+          const r = this.handleLine(line);
+          if (r === "result") sawResult = true;
+        }
       }
     });
 
@@ -76,60 +83,78 @@ export class ClaudeCodeWorker extends WorkerEngine {
 
     child.on("close", (code) => {
       this.child = undefined;
-      if (buf.trim()) this.handleLine(buf.trim());
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = undefined;
+      if (buf.trim()) {
+        const r = this.handleLine(buf.trim());
+        if (r === "result") sawResult = true;
+      }
       if (code !== 0 && code !== null) {
-        const msg = stderr.trim() || `工作层退出码 ${code}`;
+        const msg = compactStderr(stderr) || `工作层退出码 ${code}`;
         this.emitEvent({ kind: "error", message: msg });
+      } else if (!sawResult && stderr.trim()) {
+        log.debug(`工作层 stderr: ${compactStderr(stderr)}`);
       }
       this.emitEvent({ kind: "done" });
     });
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string): "result" | "other" {
     let obj: any;
     try {
       obj = JSON.parse(line);
     } catch {
-      // 非 JSON 行（可能是普通日志），当作文本透出
       this.emitEvent({ kind: "text", text: line });
-      return;
+      return "other";
+    }
+
+    if (obj.session_id && obj.session_id !== this.workerSessionId) {
+      this.workerSessionId = obj.session_id;
+      this.emitEvent({ kind: "session_id", id: obj.session_id });
     }
 
     switch (obj.type) {
       case "system":
-        if (obj.session_id && obj.session_id !== this.workerSessionId) {
-          this.workerSessionId = obj.session_id;
-          this.emitEvent({ kind: "session_id", id: obj.session_id });
+        if (obj.subtype === "init") {
+          log.debug(`CLI init model=${obj.model ?? "?"} permission=${obj.permissionMode ?? "?"}`);
         }
-        break;
-      case "assistant": {
-        const content = obj.message?.content ?? [];
-        for (const block of content) {
-          if (block.type === "text" && block.text) {
-            this.emitEvent({ kind: "text", text: block.text });
-          } else if (block.type === "tool_use") {
-            this.emitEvent({ kind: "text", text: `[工具调用] ${block.name ?? "?"}` });
-          }
-        }
-        break;
-      }
+        return "other";
+
+      case "assistant":
+        this.emitAssistantContent(obj.message?.content ?? []);
+        return "other";
+
       case "result":
-        if (obj.session_id) this.workerSessionId = obj.session_id;
-        // done 在 close 时统一发，这里仅记录 summary 由后续封装；避免重复
+        if (obj.subtype && obj.subtype !== "success") {
+          this.emitEvent({ kind: "error", message: `CLI result ${obj.subtype}` });
+        }
         if (typeof obj.result === "string" && obj.result.trim()) {
           this.emitEvent({ kind: "text", text: obj.result });
         }
-        break;
+        return "result";
+
       default:
-        break;
+        return "other";
+    }
+  }
+
+  private emitAssistantContent(content: any[]): void {
+    for (const block of content) {
+      if (block?.type === "text" && block.text) {
+        this.emitEvent({ kind: "text", text: block.text });
+      } else if (block?.type === "tool_use") {
+        this.emitEvent({ kind: "text", text: `[工具调用] ${block.name ?? "?"}` });
+      }
     }
   }
 
   resolvePermission(_requestId: string, _approve: boolean): void {
-    // headless 一次性回合下不产生交互式权限请求，见类注释。
+    // CLI 一次性回合下不产生 UI 交互式权限；后续通过 MCP permission-prompt-tool 桥接。
   }
 
   async close(): Promise<void> {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
     if (this.child) {
       this.child.kill();
       this.child = undefined;
@@ -151,16 +176,21 @@ function mapPermissionMode(mode: string): string | null {
   }
 }
 
-/** 探测某个命令是否可用（PATH 上能跑 --version）。 */
-export function isCommandAvailable(command: string): boolean {
-  try {
-    const r = spawnSync(command, ["--version"], {
-      shell: process.platform === "win32",
-      timeout: 5000,
-      stdio: "ignore",
-    });
-    return r.status === 0 || r.status === null ? r.error === undefined : false;
-  } catch {
-    return false;
-  }
+function compactStderr(s: string): string {
+  return s.replace(/\s+/g, " ").trim().slice(0, 600);
+}
+
+/** 探测某个命令是否可用（PATH 上能找到，且 --version 不崩）。 */
+export { isCommandAvailable };
+
+export function getCommandVersion(command: string): string | null {
+  if (!isCommandAvailable(command)) return null;
+  const r = spawnCommandSync(command, ["--version"], { timeoutMs: 5000, stdio: "pipe" });
+  const out = Buffer.concat([
+    r.stdout ? Buffer.from(r.stdout as any) : Buffer.alloc(0),
+    r.stderr ? Buffer.from(r.stderr as any) : Buffer.alloc(0),
+  ])
+    .toString("utf8")
+    .trim();
+  return out.split("\n")[0] || "available";
 }

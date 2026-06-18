@@ -12,9 +12,11 @@ export function expandHome(p: string): string {
   return p;
 }
 
-/** 指挥官全局数据目录：~/.majordomo（配置、会话库、历史）。 */
+/** 指挥官全局数据目录：~/.majordomo（配置、会话库、历史）。可用 MAJORDOMO_HOME 覆盖，方便测试/便携模式。 */
 export function globalDir(): string {
-  return path.join(os.homedir(), ".majordomo");
+  return process.env.MAJORDOMO_HOME
+    ? path.resolve(expandHome(process.env.MAJORDOMO_HOME))
+    : path.join(os.homedir(), ".majordomo");
 }
 
 export function ensureDir(dir: string): void {

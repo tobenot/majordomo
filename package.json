@@ -24,6 +24,8 @@
     "start": "node dist/cli.js",
     "daemon": "node dist/cli.js daemon",
     "web": "node dist/cli.js web",
+    "doctor": "node dist/cli.js doctor",
+    "selftest": "node dist/cli.js selftest",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "engines": {

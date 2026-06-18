@@ -2,11 +2,14 @@
 import { Command } from "commander";
 import * as fs from "fs";
 import * as path from "path";
-import { loadConfig } from "./core/config";
+import { loadConfig, resolveProfile, persistActiveProfile } from "./core/config";
 import { CoreDaemon } from "./core/daemon";
+import { runSelfTest } from "./core/selftest";
 import { runTui } from "./tui/client";
 import { startWebServer } from "./web/server";
 import { setVerbose, createLogger } from "./core/logger";
+import { getCommandVersion } from "./worker/claudeCodeWorker";
+import { isSdkResolvable, resolveEngineName, EngineChoice } from "./worker/factory";
 
 const log = createLogger("cli");
 
@@ -130,9 +133,48 @@ async function main(): Promise<void> {
         log.error(`未知 profile: ${name}，可用: ${Object.keys(config.profiles).join(", ")}`);
         process.exit(1);
       }
-      const { persistActiveProfile } = require("./core/config");
       persistActiveProfile(name);
       log.info(`已切换 activeProfile → ${name}`);
+    });
+
+  // ── doctor：环境诊断 ──
+  program
+    .command("doctor")
+    .description("检查 Node、配置、profile 命令、SDK、Web 资源和通知脚本")
+    .action(() => {
+      const { config, sources } = buildCfg();
+      const active = resolveProfile(config);
+      const engine = resolveEngineName(config.worker.engine as EngineChoice, active.profile.command);
+      const rows: Array<[string, string]> = [];
+      rows.push(["Node", process.version]);
+      rows.push(["Config sources", sources.length ? sources.join(", ") : "defaults only"]);
+      rows.push(["Active profile", `${active.name} (${active.profile.command})`]);
+      rows.push(["Resolved engine", engine]);
+      rows.push(["SDK package", isSdkResolvable() ? "@anthropic-ai/claude-code resolvable" : "not installed (CLI/mock fallback)"]);
+      for (const [name, profile] of Object.entries(config.profiles)) {
+        rows.push([`Profile ${name}`, getCommandVersion(profile.command) ?? `command not found: ${profile.command}`]);
+      }
+      rows.push(["Web assets", fs.existsSync(path.join(__dirname, "web", "public", "index.html")) ? "dist ok" : "missing (run npm run build)"]);
+      rows.push(["Notify script", fs.existsSync(path.join(root, "tools", "notify-done", "notify-done.ps1")) ? "found" : "missing"]);
+      const w = Math.max(...rows.map((r) => r[0].length));
+      for (const [k, v] of rows) {
+        // eslint-disable-next-line no-console
+        console.log(`${k.padEnd(w)} : ${v}`);
+      }
+    });
+
+  // ── selftest：端到端自测 ──
+  program
+    .command("selftest")
+    .description("端到端自测（mock worker + template persona + WebSocket + 权限流程）")
+    .action(async () => {
+      const { config } = buildCfg();
+      const r = await runSelfTest(config, root);
+      // eslint-disable-next-line no-console
+      console.log(r.ok ? "SELFTEST OK" : "SELFTEST FAILED");
+      // eslint-disable-next-line no-console
+      console.log(`events: ${r.events.join(" -> ")}`);
+      if (!r.ok) process.exit(1);
     });
 
   // ── 默认（attach）：内嵌 daemon + TUI ──

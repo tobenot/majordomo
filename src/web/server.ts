@@ -41,6 +41,11 @@ export function startWebServer(opts: {
 
   const server = http.createServer((req, res) => {
     let urlPath = (req.url || "/").split("?")[0];
+    if (urlPath === "/healthz") {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: true, wsUrl, publicDir }));
+      return;
+    }
     if (urlPath === "/") urlPath = "/index.html";
     const filePath = path.join(publicDir, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ""));
 

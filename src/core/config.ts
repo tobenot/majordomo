@@ -13,7 +13,12 @@ export interface Profile {
 }
 
 export interface WorkerConfig {
-  engine: "auto" | "claude" | "mock";
+  /** auto: SDK → CLI → mock；sdk: 可选 @anthropic-ai/claude-code；cli/claude: 直接调 profile.command；mock: 回显 */
+  engine: "auto" | "sdk" | "cli" | "claude" | "mock";
+  maxTurns?: number;
+  timeoutMs?: number;
+  allowedTools?: string[];
+  disallowedTools?: string[];
 }
 
 export interface PersonaConfig {
@@ -44,7 +49,7 @@ export const DEFAULT_CONFIG: Config = {
     tclaude: { command: "tclaude", personalDir: "~/.tclaude" },
   },
   permissionMode: "auto",
-  worker: { engine: "auto" },
+  worker: { engine: "auto", maxTurns: 8, timeoutMs: 10 * 60 * 1000 },
   persona: { mode: "auto", name: "指挥官", style: "cat-girl-maid" },
   notifiers: ["powershell", "console"],
   diaryDir: ".codebuddy/memory",

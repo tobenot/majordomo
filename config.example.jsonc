@@ -29,12 +29,18 @@
   "permissionMode": "auto",
 
   // ── 工作层 worker ───────────────────────────────────────
-  // engine: "auto" | "claude" | "mock"
-  //   auto  → 能用真 Claude Code 就用，否则降级 mock（开箱即跑）
-  //   claude→ 强制走 Agent SDK / claude CLI（需已安装并登录）
+  // engine: "auto" | "sdk" | "cli" | "claude" | "mock"
+  //   auto  → 优先 @anthropic-ai/claude-code SDK；没有 SDK 则走 profile.command；再没有就 mock
+  //   sdk   → 强制走 TypeScript SDK（需自行 npm install @anthropic-ai/claude-code）
+  //   cli   → 强制走 profile.command 的 Claude Code CLI
+  //   claude→ cli 的兼容别名
   //   mock  → 回显引擎，无需任何凭证，用于演示整条链路
   "worker": {
-    "engine": "auto"
+    "engine": "auto",
+    "maxTurns": 8,
+    "timeoutMs": 600000,
+    // "allowedTools": ["Read", "Grep", "Glob"],
+    // "disallowedTools": ["Bash(git push)"]
   },
 
   // ── 人设层 persona ──────────────────────────────────────

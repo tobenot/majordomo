@@ -37,7 +37,8 @@ graph TD
 
   subgraph Worker["工作层（每会话一个）"]
     MOCK["MockWorker<br/>回显，开箱即跑"]
-    CC["ClaudeCodeWorker<br/>真实 claude，--resume 续接"]
+    SDK["SdkWorker<br/>@anthropic-ai/claude-code query()"]
+    CC["ClaudeCodeWorker<br/>CLI fallback，--resume 续接"]
   end
 
   subgraph Persona["人设层（嘴）"]
@@ -93,15 +94,18 @@ sequenceDiagram
 
 ## 关键设计取舍
 
-- **连续 session**：用捕获 `session_id` + `--resume` 续接（可靠），不依赖 `--continue`。
-- **开箱即跑**：worker / persona 都可降级（mock / 模板），没装 claude、没配 API key 也能跑通整条链路。
+- **Claude Code 接入以公开文档为准**：网络调研确认 TS SDK 包是 `@anthropic-ai/claude-code`，主 API 是 `query()` async iterator；公开文档没有稳定 `ClaudeSDKClient/canUseTool`。
+- **工作层三段降级**：`auto` 优先 SDK；没有 SDK 就走 profile CLI；没有 CLI 就 mock，保证开箱即跑。
+- **连续 session**：CLI fallback 用捕获 `session_id` + `--resume` 续接（可靠），不依赖 `--continue`。SDK Worker 也保存 streamed `session_id`。
+- **安全启动**：CLI prompt 走 stdin，不把用户文本拼进命令行；Windows 下显式用 `cmd.exe /d /s /c`，避免 Node shell+args 弃用警告。
+- **自测与诊断**：`doctor` 检查 Node / SDK / profile 命令 / Web 资源 / 通知脚本；`selftest` 用临时 `MAJORDOMO_HOME` 隔离端到端验证。
 - **profile 切换只影响新开会话**：已跑的会话绑死启动时的 profile。坑：内网版个人目录是 `.claude-internal` 而非 `.claude`。
 - **通知可插拔、日记走 Node 原生**：日记是人设层副作用，跨平台（Linux 服务器也能写），不绑死 PowerShell。
-- **存储先用 JSON 文件**（`~/.majordomo/`）：避开 Windows native 模块编译，协议层不依赖实现，未来可换 SQLite。
+- **存储先用 JSON 文件**（`~/.majordomo/`，可用 `MAJORDOMO_HOME` 覆盖）：避开 Windows native 模块编译，协议层不依赖实现，未来可换 SQLite。
 
 ## 已知未做（留待后续）
 
-- 工作层真正的交互式权限确认（canUseTool 双向通道）需 SDK 的 stream-json 输入，当前 headless 一次性回合 + acceptEdits 不产生交互权限。MockWorker 已演示完整权限 UI 流程。
+- 工作层真正的交互式权限确认不应假设 `canUseTool`，公开文档给出的路线是 `--permission-prompt-tool` + MCP 工具桥接 UI。MockWorker 已演示完整权限 UI 流程，后续要补 MCP bridge。
 - 文档层（另开 session 写验收文档）。
 - 立绘 / CG 渲染（Web 面板已留位）。
 - 远程接入（CF Access / 推手机 notifier）——通信层已是 WebSocket，留好口子。

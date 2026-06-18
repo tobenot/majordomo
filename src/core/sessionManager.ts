@@ -50,6 +50,10 @@ export class SessionManager {
       cwd,
       command: profile.command,
       permissionMode: this.cfg.permissionMode,
+      maxTurns: this.cfg.worker.maxTurns,
+      timeoutMs: this.cfg.worker.timeoutMs,
+      allowedTools: this.cfg.worker.allowedTools,
+      disallowedTools: this.cfg.worker.disallowedTools,
     });
 
     const info: SessionInfo = {
@@ -83,6 +87,10 @@ export class SessionManager {
       cwd: info.cwd,
       command: profile.command,
       permissionMode: this.cfg.permissionMode,
+      maxTurns: this.cfg.worker.maxTurns,
+      timeoutMs: this.cfg.worker.timeoutMs,
+      allowedTools: this.cfg.worker.allowedTools,
+      disallowedTools: this.cfg.worker.disallowedTools,
       resumeId: info.workerSessionId,
     });
 
