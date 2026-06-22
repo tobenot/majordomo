@@ -287,8 +287,11 @@ export class TuiClient {
       this.println(`${C.dim}（暂无会话，输入内容或 /new 创建）${C.reset}`);
       return;
     }
-    this.println(`${C.cyan}— 会话列表 —${C.reset}`);
-    for (const s of sessions) {
+    // ponytail: show recent 10, rest still resumable by id
+    const shown = sessions.slice(-10);
+    const hidden = sessions.length - shown.length;
+    this.println(`${C.cyan}— 会话列表${hidden > 0 ? `（最近 ${shown.length}，${hidden} 条旧会话已隐藏）` : ""} —${C.reset}`);
+    for (const s of shown) {
       const cur = s.id === this.currentSession ? `${C.green}*${C.reset}` : " ";
       const when = new Date(s.updatedAt).toLocaleString();
       this.println(`${cur} ${C.bold}${s.id}${C.reset} ${s.name} ${C.dim}[${s.profile}/${s.engine}] ${s.state} ${when}${C.reset}`);
