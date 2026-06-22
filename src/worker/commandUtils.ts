@@ -17,12 +17,19 @@ export function resolveCommandPath(command: string): string | null {
   });
   if (r.status !== 0 || !r.stdout) return null;
   const lines = r.stdout.toString("utf8").split(/\r?\n/).filter(Boolean).map(s => s.trim());
-  // ponytail: on Windows, skip extensionless shell wrappers, prefer .exe/.cmd/.bat
+  // ponytail: on Windows, skip extensionless shell wrappers, prefer native exe over cmd wrappers
   if (process.platform === "win32") {
-    for (const ext of [".exe", ".cmd", ".bat"]) {
-      const match = lines.find(l => l.toLowerCase().endsWith(ext));
-      if (match) return path.normalize(match);
+    const exe = lines.find(l => l.toLowerCase().endsWith(".exe"));
+    if (exe) return path.normalize(exe);
+    // .cmd wrappers may directly invoke an .exe — resolve through them
+    for (const l of lines) {
+      if (!l.toLowerCase().endsWith(".cmd")) continue;
+      const resolved = resolveExeFromCmd(l);
+      if (resolved) return path.normalize(resolved);
     }
+    // fallback: first .cmd or .bat (for non-SDK use like version check)
+    const cmd = lines.find(l => /\.(cmd|bat)$/i.test(l));
+    if (cmd) return path.normalize(cmd);
   }
   return lines[0] ? path.normalize(lines[0]) : null;
 }
@@ -52,6 +59,22 @@ export function getCommandVersion(command: string): string | null {
 
 function quoteForCmd(parts: string[]): string {
   return parts.map((s) => `"${s.replace(/%/g, "%%").replace(/([&|<>^])/g, "^$1").replace(/"/g, '\\"')}"`).join(" ");
+}
+
+/** 解析 .cmd wrapper，如果它直接调用一个 .exe，返回该 .exe 的完整路径。否则返回 null。 */
+function resolveExeFromCmd(cmdPath: string): string | null {
+  try {
+    const content = fs.readFileSync(cmdPath, "utf8");
+    // match: "%dp0%\path\to\foo.exe"  (with optional trailing args like %*)
+    const m = content.match(/"%dp0%\\([^"]+\.exe)"/i);
+    if (!m) return null;
+    const relative = m[1];
+    const dir = path.dirname(cmdPath);
+    const resolved = path.resolve(dir, relative);
+    return fs.existsSync(resolved) ? resolved : null;
+  } catch {
+    return null;
+  }
 }
 
 

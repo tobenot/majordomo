@@ -98,7 +98,10 @@ export class SdkWorker extends WorkerEngine {
     if (this.workerSessionId) options.resume = this.workerSessionId;
 
     const executable = resolveCommandPath(this.opts.command);
-    if (executable) options.pathToClaudeCodeExecutable = executable;
+    // ponytail: only pass native binaries to SDK (.cmd/.bat are wrappers)
+    if (executable && !/\.(cmd|bat)$/i.test(executable)) {
+      options.pathToClaudeCodeExecutable = executable;
+    }
 
     return options;
   }
