@@ -143,13 +143,15 @@ vite.config.ts.timestamp-*
 .vite/
 
 # --- majordomo runtime data & local config ---
-# 运行时数据（会话库/日记/历史/缓存），全局态在 ~/.majordomo，项目态在 .commander
+# 全局运行时数据在 ~/.majordomo，项目态在 .commander
 .commander/
-.majordomo/
+# 项目 .majordomo/ 配置（config/persona/rules）进入仓库，方便多设备开发
+# 仅忽略运行时产出（如 markdown_report 生成的文件）
+.majordomo/reports/
 data/
 *.db
 *.sqlite
 
 # 真实配置（profile 模板用 .example 提交，真实 config 不进库）
-config.jsonc
-config.json
+/config.jsonc
+/config.json

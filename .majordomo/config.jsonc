@@ -1,0 +1,10 @@
+// majordomo 自举配置：用自己开发自己。
+// 全局配置 ~/.majordomo/config.jsonc 优先级低于此文件。
+{
+  "hooks": {
+    "after_task": [
+      { "type": "diary" },
+      { "type": "notify" }
+    ]
+  }
+}
