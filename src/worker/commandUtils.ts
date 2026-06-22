@@ -16,8 +16,15 @@ export function resolveCommandPath(command: string): string | null {
     windowsHide: process.platform === "win32",
   });
   if (r.status !== 0 || !r.stdout) return null;
-  const first = r.stdout.toString("utf8").split(/\r?\n/).find(Boolean);
-  return first ? path.normalize(first.trim()) : null;
+  const lines = r.stdout.toString("utf8").split(/\r?\n/).filter(Boolean).map(s => s.trim());
+  // ponytail: on Windows, skip extensionless shell wrappers, prefer .exe/.cmd/.bat
+  if (process.platform === "win32") {
+    for (const ext of [".exe", ".cmd", ".bat"]) {
+      const match = lines.find(l => l.toLowerCase().endsWith(ext));
+      if (match) return path.normalize(match);
+    }
+  }
+  return lines[0] ? path.normalize(lines[0]) : null;
 }
 
 export function getCommandVersion(command: string): string | null {
