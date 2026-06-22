@@ -54,7 +54,7 @@ export const DEFAULT_CONFIG: Config = {
     tclaude: { command: "tclaude", personalDir: "~/.tclaude" },
   },
   permissionMode: "auto",
-  worker: { engine: "auto", maxTurns: 8, timeoutMs: 10 * 60 * 1000 },
+  worker: { engine: "auto", timeoutMs: 10 * 60 * 1000 },
   persona: { mode: "auto", name: "指挥官", style: "cat-girl-maid" },
   notifiers: ["powershell", "console"],
   diaryDir: ".codebuddy/memory",
