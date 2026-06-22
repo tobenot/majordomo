@@ -21,6 +21,7 @@ export class Session extends EventEmitter {
   private workerTextBuf: string[] = [];
   private currentUserText = "";
   private turnFailed = false;
+  private interrupted = false;
 
   /** Exposed for hook context (after_task provides worker output alongside persona summary). */
   get lastWorkerText(): string {
@@ -87,11 +88,10 @@ export class Session extends EventEmitter {
 
   async interrupt(): Promise<void> {
     log.info(`打断会话 ${this.info.id}`);
+    this.interrupted = true;
     await this.worker.interrupt();
-    // worker.interrupt() calls finishTurn which resolves send() promise,
-    // the pump loop catches the abort error and calls finishTurn() which
-    // emits done → our onWorkerEvent handler sets state to idle/reporting.
-    // We don't reset state here — let the event flow handle it.
+    // worker.interrupt() calls finishTurn which emits done → onWorkerEvent
+    // sees `interrupted` and goes straight to idle (no persona report).
   }
 
   resolvePermission(requestId: string, approve: boolean, updatedInput?: Record<string, unknown>): void {
@@ -128,6 +128,12 @@ export class Session extends EventEmitter {
       case "done":
         if (this.turnFailed) {
           this.setState("error");
+          break;
+        }
+        if (this.interrupted) {
+          // ponytail: interrupt = clean transition to idle, skip persona summary
+          this.interrupted = false;
+          this.setState("idle");
           break;
         }
         await this.report();

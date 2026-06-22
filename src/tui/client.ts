@@ -14,6 +14,10 @@ const C = {
   bold: "\x1b[1m",
 };
 
+// ponytail: bracketed paste markers — terminal wraps pasted content in these
+const PASTE_START = "\x1b[200~";
+const PASTE_END = "\x1b[201~";
+
 /**
  * TUI 客户端：连到 core daemon，发送指令、渲染结构化消息。
  * 这是给纯键盘党 / 服务器场景用的前端，看的是和 Web 面板同一份状态。
@@ -53,13 +57,19 @@ export class TuiClient {
 
   private setupReadline(): void {
     this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    process.stdout.write("\x1b[?2004h"); // ponytail: enable bracketed paste mode
+    process.on("exit", () => process.stdout.write("\x1b[?2004l"));
     this.printBanner();
     this.prompt();
-    this.rl.on("line", (line) => this.onLine(line.trim()));
+    this.rl.on("line", (line) => this.onLine(line));
     this.rl.on("SIGINT", () => {
       if (this.currentSession && this.sessionState !== "idle" && this.sessionState !== "error" && this.sessionState !== "closed") {
+        // ponytail: interrupt clears the queued input — pasted floods don't keep firing after Ctrl+C
+        this.pendingInput = undefined;
+        this.buffer = [];
+        this.pasteBuf = null;
         this.send({ type: "interrupt", sessionId: this.currentSession });
-        this.println(`\n${C.yellow}已请求打断…${C.reset}`);
+        this.println(`\n${C.yellow}已请求打断（排队已清空）…${C.reset}`);
       } else {
         this.println(`\n${C.dim}再见，主人～${C.reset}`);
         process.exit(0);
@@ -101,8 +111,30 @@ export class TuiClient {
   private pendingFirstInput?: string;
   // ponytail: backslash continuation = multiline input; stdlib readline has no Shift+Enter
   private buffer: string[] = [];
+  // ponytail: bracketed-paste accumulator — null when not inside a paste block
+  private pasteBuf: string[] | null = null;
 
-  private onLine(line: string): void {
+  private onLine(raw: string): void {
+    // bracketed paste: terminal wraps pasted content in ESC[200~ ... ESC[201~.
+    // Whole block becomes ONE message instead of one-line-per-submit.
+    if (raw.startsWith(PASTE_START) || this.pasteBuf !== null) {
+      let line = raw;
+      if (raw.startsWith(PASTE_START)) {
+        this.pasteBuf = this.pasteBuf ?? [];
+        line = line.slice(PASTE_START.length);
+      }
+      const ended = line.endsWith(PASTE_END);
+      if (ended) line = line.slice(0, -PASTE_END.length);
+      this.pasteBuf!.push(line);
+      if (ended) {
+        const text = this.pasteBuf!.join("\n");
+        this.pasteBuf = null;
+        this.handlePastedText(text);
+      }
+      return;
+    }
+
+    const line = raw.trim();
     if (this.pendingAsk) {
       this.handleAskAnswer(line);
       return;
@@ -146,6 +178,17 @@ export class TuiClient {
       return;
     }
     this.submitText(line);
+  }
+
+  // ponytail: pasted block → single message. Single-line paste behaves like typed input.
+  private handlePastedText(text: string): void {
+    const t = text.replace(/^\n+/, "").replace(/\n+$/, "");
+    if (!t) { this.prompt(); return; }
+    if (!t.includes("\n")) {
+      this.onLine(t); // route single-line paste through normal logic (commands, backslash)
+      return;
+    }
+    this.submitText(t);
   }
 
   private submitText(text: string): void {

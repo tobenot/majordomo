@@ -194,7 +194,11 @@ export class SdkWorker extends WorkerEngine {
         this.emitAssistantContent(o.message?.content ?? []);
         break;
       case "result":
-        if (o.subtype !== "success") {
+        // ponytail: an interrupted turn ends with a non-success result subtype;
+        // that's the expected outcome of Ctrl+C, not an error.
+        if (this.interrupted) {
+          // no-op — finishTurn below
+        } else if (o.subtype !== "success") {
           this.emitEvent({ kind: "error", message: `SDK result ${o.subtype}` });
         } else if (o.result?.trim() && !this.turnHadText) {
           this.emitText(o.result);
