@@ -69,16 +69,11 @@ export class TuiClient {
   private inlineMode = false;
 
   private println(s: string): void {
-    const isInline = s.startsWith("\r");
-    if (isInline) s = s.slice(1);
-    if (this.rl) {
-      readline.cursorTo(process.stdout, 0);
-      readline.clearLine(process.stdout, 0);
+    if (this.inlineMode) {
+      process.stdout.write("\n");
+      this.inlineMode = false;
     }
-    // ponytail: \r-prefixed messages overwrite same line (thinking_tokens counter)
-    if (!isInline && this.inlineMode) process.stdout.write("\n");
-    process.stdout.write(s + (isInline ? "" : "\n"));
-    this.inlineMode = isInline;
+    process.stdout.write(s + "\n");
     if (this.rl) this.rl.prompt(true);
   }
 
@@ -293,9 +288,20 @@ export class TuiClient {
         this.println(`${C.dim}— 历史 (${msg.sessionId}) —${C.reset}`);
         for (const e of msg.entries) this.println(`${C.dim}${e.channel}:${C.reset} ${e.text}`);
         break;
-      case "worker_message":
-        this.println(`${C.dim}工作层:${C.reset} ${renderMarkdown(msg.text)}`);
+      case "worker_message": {
+        const isInline = msg.text.startsWith("\r");
+        const body = renderMarkdown(isInline ? msg.text.slice(1) : msg.text);
+        if (isInline) {
+          // ponytail: \r-prefixed messages overwrite same line (thinking_tokens counter)
+          process.stdout.write("\x1b[0G\x1b[0K");
+          process.stdout.write(`${C.dim}工作层:${C.reset} ${body}`);
+          this.inlineMode = true;
+          if (this.rl) this.rl.prompt(true);
+        } else {
+          this.println(`${C.dim}工作层:${C.reset} ${body}`);
+        }
         break;
+      }
       case "persona_message":
         this.println(`${C.magenta}${C.bold}${this.personaName}:${C.reset} ${renderMarkdown(msg.text)}`);
         break;
