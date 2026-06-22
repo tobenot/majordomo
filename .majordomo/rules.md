@@ -36,3 +36,11 @@ When the user says "长任务", "take your time", "I'll be back later":
 - Don't proactively sync between rule files
 - Don't unilaterally refactor or unify code style
 - Don't invent new names for the user
+
+## Example Sync
+
+`docs/examples/` contains canonical templates for users. When changing majordomo's own `.majordomo/` or `~/.majordomo/` persona/config files, update the corresponding example:
+- `.majordomo/persona.md` or `~/.majordomo/persona.md` → `docs/examples/global-persona.example.md`
+- `.majordomo/config.jsonc` → `docs/examples/project-config.example.jsonc`
+- `~/.majordomo/config.jsonc` → `docs/examples/global-config.example.jsonc`
+- New hook types → `config.example.jsonc`

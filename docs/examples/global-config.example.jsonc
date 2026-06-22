@@ -1,0 +1,12 @@
+// majordomo 全局默认配置示例。
+// 复制到 ~/.majordomo/config.jsonc 即可使用。
+// 每个项目的 .majordomo/config.jsonc 会覆盖此文件（deep merge）。
+// 注意：hook 数组是完全替换，不是追加。
+{
+  "hooks": {
+    "after_task": [
+      { "type": "diary" },
+      { "type": "notify" }
+    ]
+  }
+}

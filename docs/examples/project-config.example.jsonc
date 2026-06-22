@@ -1,0 +1,18 @@
+// majordomo 项目配置示例。
+// 复制到 .majordomo/config.jsonc 即可使用。
+// 优先级高于 ~/.majordomo/config.jsonc 和 ./config.jsonc。
+{
+  "hooks": {
+    "after_task": [
+      { "type": "diary" },
+      { "type": "notify" }
+      // 更多内置 hook 类型：
+      // { "type": "shell", "command": "make build", "timeoutMs": 60000 }
+      // { "type": "markdown_report", "output_dir": ".majordomo/reports" }
+    ]
+    // 其他生命周期事件（不配置则无 hook）：
+    // "on_session_create": [],
+    // "on_session_close": [],
+    // "on_error": [{"type": "notify"}]
+  }
+}
