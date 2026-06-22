@@ -105,19 +105,20 @@ export class SdkWorker extends WorkerEngine {
       options.pathToClaudeCodeExecutable = executable;
     }
 
-    // 注入项目行为规则（.majordomo/rules.md），走 systemPrompt.append 而非修改 CLAUDE.md
+    // Worker layer is English-only. Persona layer handles localization.
+    let append = `\n\n---\n## Language\nYou must think and respond entirely in English. Never use Chinese or any other language.\n`;
+
+    // Inject project behavioral rules (.majordomo/rules.md) via systemPrompt.append
     const rulesPath = path.join(this.opts.cwd, ".majordomo", "rules.md");
     if (fs.existsSync(rulesPath)) {
       const rules = fs.readFileSync(rulesPath, "utf8").trim();
       if (rules) {
-        options.systemPrompt = {
-          type: "preset",
-          preset: "claude_code",
-          append: `\n\n---\n## Project Rules (from .majordomo/rules.md)\n${rules}`,
-        };
+        append += `\n\n---\n## Project Rules (from .majordomo/rules.md)\n${rules}`;
         log.debug(`注入项目行为规则: ${rulesPath} (${rules.length} 字符)`);
       }
     }
+
+    options.systemPrompt = { type: "preset", preset: "claude_code", append };
 
     return options;
   }

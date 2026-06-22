@@ -18,7 +18,8 @@ export class DiaryHook implements Hook {
     const now = new Date();
     const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     const time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const oneLine = context.text.replace(/\s+/g, " ").slice(0, 200);
+    // Use workerText (English) when available; fallback to persona text
+    const oneLine = (context.workerText || context.text).replace(/\s+/g, " ").slice(0, 200);
     const file = path.join(this.diaryDir, `${date}.md`);
     fs.appendFileSync(file, `- ${time} [${context.sessionId}] ${oneLine}\n`, { encoding: "utf8" });
   }
