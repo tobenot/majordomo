@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 export type WorkerEvent =
   | { kind: "session_id"; id: string }
   | { kind: "text"; text: string }
-  | { kind: "permission"; requestId: string; tool: string; detail: string }
+  | { kind: "permission"; requestId: string; tool: string; detail: string; rawInput?: string }
   /** 一个回合结束（工作层把控制权交回） */
   | { kind: "done"; summary?: string }
   | { kind: "error"; message: string };
@@ -48,7 +48,7 @@ export abstract class WorkerEngine extends EventEmitter {
   abstract send(text: string): Promise<void>;
 
   /** 回应一个权限请求。 */
-  abstract resolvePermission(requestId: string, approve: boolean): void;
+  abstract resolvePermission(requestId: string, approve: boolean, updatedInput?: Record<string, unknown>): void;
 
   /** 关闭会话，释放资源。 */
   abstract close(): Promise<void>;

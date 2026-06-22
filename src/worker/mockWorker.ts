@@ -62,7 +62,7 @@ export class MockWorker extends WorkerEngine {
     }
   }
 
-  resolvePermission(requestId: string, approve: boolean): void {
+  resolvePermission(requestId: string, approve: boolean, _updatedInput?: Record<string, unknown>): void {
     const resolve = this.pendingPermissions.get(requestId);
     if (resolve) {
       this.pendingPermissions.delete(requestId);

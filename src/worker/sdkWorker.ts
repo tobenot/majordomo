@@ -29,7 +29,7 @@ export class SdkWorker extends WorkerEngine {
   private abort?: AbortController;
   private closed = false;
   private currentTurn?: PendingTurn;
-  private pendingPermissions = new Map<string, (approve: boolean) => void>();
+  private pendingPermissions = new Map<string, (result: PermissionReply) => void>();
   private turnHadText = false;
 
   async send(text: string): Promise<void> {
@@ -55,11 +55,11 @@ export class SdkWorker extends WorkerEngine {
     });
   }
 
-  resolvePermission(requestId: string, approve: boolean): void {
+  resolvePermission(requestId: string, approve: boolean, updatedInput?: Record<string, unknown>): void {
     const resolve = this.pendingPermissions.get(requestId);
     if (!resolve) return;
     this.pendingPermissions.delete(requestId);
-    resolve(approve);
+    resolve({ approve, updatedInput });
   }
 
   async close(): Promise<void> {
@@ -69,7 +69,7 @@ export class SdkWorker extends WorkerEngine {
     this.abort?.abort();
     for (const [id, resolve] of this.pendingPermissions) {
       this.pendingPermissions.delete(id);
-      resolve(false);
+      resolve({ approve: false });
     }
     this.finishTurn(false);
   }
@@ -109,11 +109,12 @@ export class SdkWorker extends WorkerEngine {
   private readonly canUseTool: CanUseTool = async (toolName, input, options): Promise<PermissionResult> => {
     const requestId = options.toolUseID || randomUUID();
     const detail = formatPermissionDetail(toolName, input, options);
-    this.emitEvent({ kind: "permission", requestId, tool: toolName, detail });
+    const rawInput = toolName === "AskUserQuestion" ? safeJson(input) : undefined;
+    this.emitEvent({ kind: "permission", requestId, tool: toolName, detail, rawInput });
 
-    const approve = await waitForPermission(this.pendingPermissions, requestId, options.signal);
-    if (approve) {
-      return { behavior: "allow", updatedInput: input };
+    const result = await waitForPermission(this.pendingPermissions, requestId, options.signal);
+    if (result.approve) {
+      return { behavior: "allow", updatedInput: result.updatedInput ?? input };
     }
     return {
       behavior: "deny",
@@ -204,7 +205,9 @@ export class SdkWorker extends WorkerEngine {
       if (block?.type === "text" && block.text) {
         this.emitText(block.text);
       } else if (block?.type === "tool_use") {
-        this.emitText(`[工具调用] ${block.name ?? "?"}`);
+        const name = block.name ?? "?";
+        const summary = toolSummary(name, block.input);
+        this.emitText(`[${name}] ${summary}`);
       }
     }
   }
@@ -271,20 +274,26 @@ function toUserMessage(text: string): SDKUserMessage {
   };
 }
 
+interface PermissionReply {
+  approve: boolean;
+  updatedInput?: Record<string, unknown>;
+}
+
 async function waitForPermission(
-  pending: Map<string, (approve: boolean) => void>,
+  pending: Map<string, (result: PermissionReply) => void>,
   requestId: string,
   signal: AbortSignal
-): Promise<boolean> {
-  if (signal.aborted) return false;
-  return new Promise<boolean>((resolve) => {
-    const done = (approve: boolean) => {
+): Promise<PermissionReply> {
+  const denied: PermissionReply = { approve: false };
+  if (signal.aborted) return denied;
+  return new Promise<PermissionReply>((resolve) => {
+    const done = (result: PermissionReply) => {
       signal.removeEventListener("abort", onAbort);
-      resolve(approve);
+      resolve(result);
     };
     const onAbort = () => {
       pending.delete(requestId);
-      done(false);
+      done(denied);
     };
     pending.set(requestId, done);
     signal.addEventListener("abort", onAbort, { once: true });
@@ -304,6 +313,25 @@ function safeJson(value: unknown): string {
   } catch {
     return String(value).slice(0, 800);
   }
+}
+
+/** ponytail: extract the most useful field from a tool_use input for display. */
+function toolSummary(name: string, input: Record<string, unknown>): string {
+  const FIELDS: Record<string, string> = {
+    Bash: "command", Read: "file_path", Write: "file_path", Edit: "file_path",
+    Grep: "pattern", Glob: "pattern", WebFetch: "url", WebSearch: "query",
+  };
+  const key = FIELDS[name];
+  if (key && typeof input[key] === "string") {
+    // ponytail: trim long commands/paths to ~100 chars
+    const v = input[key] as string;
+    return v.length > 100 ? v.slice(0, 97) + "..." : v;
+  }
+  if (name === "AskUserQuestion" && Array.isArray(input.questions) && input.questions.length > 0) {
+    const q = input.questions[0] as Record<string, unknown>;
+    return `Q: ${typeof q.question === "string" ? (q.question as string).slice(0, 80) : "?"}`;
+  }
+  return safeJson(input);
 }
 
 export async function isSdkAvailable(): Promise<boolean> {

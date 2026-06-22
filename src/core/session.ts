@@ -75,8 +75,8 @@ export class Session extends EventEmitter {
     }
   }
 
-  resolvePermission(requestId: string, approve: boolean): void {
-    this.worker.resolvePermission(requestId, approve);
+  resolvePermission(requestId: string, approve: boolean, updatedInput?: Record<string, unknown>): void {
+    this.worker.resolvePermission(requestId, approve, updatedInput);
     if (this.info.state === "waiting_permission") this.setState("thinking");
   }
 
@@ -102,6 +102,7 @@ export class Session extends EventEmitter {
           requestId: ev.requestId,
           tool: ev.tool,
           detail: ev.detail,
+          rawInput: ev.rawInput,
         });
         break;
 

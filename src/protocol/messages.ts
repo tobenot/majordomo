@@ -55,7 +55,7 @@ export type ClientMessage =
   /** 透传斜杠命令给工作层 session，例如 /compact /model */
   | { type: "slash"; sessionId: string; command: string; args?: string }
   | { type: "switch_profile"; profile: string }
-  | { type: "permission_response"; sessionId: string; requestId: string; approve: boolean };
+  | { type: "permission_response"; sessionId: string; requestId: string; approve: boolean; updatedInput?: Record<string, unknown> };
 
 // ─────────────────────────────────────────────────────────────
 // Core → Client
@@ -72,7 +72,7 @@ export type ServerMessage =
   /** 人设层用人话汇报（指挥官的"嘴"） */
   | { type: "persona_message"; sessionId: string; text: string }
   /** 工作层想做高危操作，请人类批准 */
-  | { type: "permission_request"; sessionId: string; requestId: string; tool: string; detail: string }
+  | { type: "permission_request"; sessionId: string; requestId: string; tool: string; detail: string; rawInput?: string }
   | { type: "profile_switched"; profile: string }
   | { type: "error"; message: string; sessionId?: string };
 

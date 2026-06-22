@@ -161,7 +161,7 @@ export class CoreDaemon {
 
       case "permission_response": {
         const session = this.mgr.get(msg.sessionId);
-        if (session) session.resolvePermission(msg.requestId, msg.approve);
+        if (session) session.resolvePermission(msg.requestId, msg.approve, msg.updatedInput);
         break;
       }
     }
