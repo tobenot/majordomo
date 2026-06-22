@@ -85,11 +85,15 @@ export class TuiClient {
   private printBanner(): void {
     this.println(`${C.magenta}${C.bold}majordomo · 指挥官 TUI${C.reset}`);
     this.println(
-      `${C.dim}输入即对话；命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
+      `${C.dim}输入即对话；行尾加 \\ 可换行续写（空行取消）；命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
     );
   }
 
   // ── 输入处理 ──────────────────────────────────────────
+  private pendingFirstInput?: string;
+  // ponytail: backslash continuation = multiline input; stdlib readline has no Shift+Enter
+  private buffer: string[] = [];
+
   private onLine(line: string): void {
     if (this.pendingAsk) {
       this.handleAskAnswer(line);
@@ -97,6 +101,25 @@ export class TuiClient {
     }
     if (this.pendingPermission) {
       this.handlePermissionAnswer(line);
+      return;
+    }
+    // multiline continuation: empty line or command aborts a pending buffer
+    if (this.buffer.length) {
+      if (!line || line.startsWith("/")) {
+        this.buffer = [];
+        if (line.startsWith("/")) { this.handleCommand(line); return; }
+        this.println(`${C.dim}（多行输入已取消）${C.reset}`);
+        this.prompt();
+        return;
+      }
+      if (line.endsWith("\\")) {
+        this.buffer.push(line.slice(0, -1));
+        this.rl.setPrompt(`${C.dim}…${C.reset} `);
+        this.rl.prompt();
+        return;
+      }
+      this.submitText([...this.buffer, line].join("\n"));
+      this.buffer = [];
       return;
     }
     if (!line) {
@@ -107,17 +130,25 @@ export class TuiClient {
       this.handleCommand(line);
       return;
     }
-    // 普通输入：无会话则自动建一个
+    // start multiline if line ends with backslash
+    if (line.endsWith("\\")) {
+      this.buffer.push(line.slice(0, -1));
+      this.rl.setPrompt(`${C.dim}…${C.reset} `);
+      this.rl.prompt();
+      return;
+    }
+    this.submitText(line);
+  }
+
+  private submitText(text: string): void {
     if (!this.currentSession) {
-      this.send({ type: "create_session", name: line.slice(0, 20) });
-      this.pendingFirstInput = line;
+      this.send({ type: "create_session", name: text.slice(0, 20) });
+      this.pendingFirstInput = text;
     } else {
-      this.send({ type: "user_input", sessionId: this.currentSession, text: line });
+      this.send({ type: "user_input", sessionId: this.currentSession, text });
     }
     this.prompt();
   }
-
-  private pendingFirstInput?: string;
 
   private handleCommand(line: string): void {
     const [cmd, ...rest] = line.slice(1).split(/\s+/);
