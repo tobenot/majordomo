@@ -3,11 +3,12 @@ import { WebSocketServer, WebSocket } from "ws";
 import { Config, resolveProfile, persistActiveProfile } from "./config";
 import { Store } from "./store";
 import { SessionManager } from "./sessionManager";
-import { appendDiary } from "./diary";
 import { createPersona } from "../persona/factory";
 import { createNotifier, NotifierBus } from "../notify/factory";
 import { resolveEngineName, EngineChoice } from "../worker/factory";
 import { parseClientMessage, ServerMessage, ClientMessage } from "../protocol/messages";
+import { HookRunner } from "../hooks/hookRunner";
+import { createHookFactory } from "../hooks/factory";
 import { createLogger } from "./logger";
 
 const log = createLogger("daemon");
@@ -20,19 +21,28 @@ export class CoreDaemon {
   private store = new Store();
   private persona = createPersona(this.cfg.persona);
   private notifier: NotifierBus = createNotifier(this.cfg.notifiers);
-  private mgr: SessionManager;
+  private hooks!: HookRunner;
+  private mgr!: SessionManager;
   private wss?: WebSocketServer;
   private clients = new Set<WebSocket>();
   private diaryDir: string;
 
   constructor(private cfg: Config, private projectRoot: string = process.cwd()) {
     this.diaryDir = path.resolve(projectRoot, cfg.diaryDir);
+    this.hooks = new HookRunner(
+      cfg.hooks,
+      createHookFactory({
+        diaryDir: this.diaryDir,
+        notifier: this.notifier,
+        projectRoot: this.projectRoot,
+      }),
+    );
     this.mgr = new SessionManager(
       cfg,
       this.store,
       this.persona,
       (msg) => this.broadcast(msg),
-      (sessionId, text) => this.onReport(sessionId, text)
+      this.hooks,
     );
   }
 
@@ -164,21 +174,6 @@ export class CoreDaemon {
         if (session) session.resolvePermission(msg.requestId, msg.approve, msg.updatedInput);
         break;
       }
-    }
-  }
-
-  /** 人设层完成一轮汇报 → 触发通知 + 增量日记。 */
-  private onReport(sessionId: string, text: string): void {
-    try {
-      this.notifier.notify(text);
-    } catch (e) {
-      log.warn(`通知失败: ${(e as Error).message}`);
-    }
-    try {
-      const oneLine = text.replace(/\s+/g, " ").slice(0, 200);
-      appendDiary(this.diaryDir, `[${sessionId}] ${oneLine}`);
-    } catch (e) {
-      log.warn(`写日记失败: ${(e as Error).message}`);
     }
   }
 

@@ -34,3 +34,10 @@ export function sessionsDbPath(): string {
 export function historyDir(): string {
   return path.join(globalDir(), "history");
 }
+
+/** 项目级 .majordomo/ 数据目录。可用 MAJORDOMO_PROJECT_DIR 覆盖。 */
+export function projectDir(root: string = process.cwd()): string {
+  return process.env.MAJORDOMO_PROJECT_DIR
+    ? path.resolve(expandHome(process.env.MAJORDOMO_PROJECT_DIR))
+    : path.join(root, ".majordomo");
+}

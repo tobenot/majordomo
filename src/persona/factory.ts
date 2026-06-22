@@ -14,15 +14,15 @@ const log = createLogger("persona:factory");
  */
 export function createPersona(cfg: PersonaConfig): PersonaEngine {
   if (cfg.mode === "template") {
-    return new TemplatePersona(cfg.name);
+    return new TemplatePersona(cfg.name, cfg.projectInstructions);
   }
 
-  const api = ApiPersona.fromEnv(cfg.name, cfg.style);
+  const api = ApiPersona.fromEnv(cfg.name, cfg.style, cfg.projectInstructions);
 
   if (cfg.mode === "api") {
     if (api) return api;
     log.warn("persona.mode=api 但缺少 PERSONA_API_* 环境变量，降级到离线模板");
-    return new TemplatePersona(cfg.name);
+    return new TemplatePersona(cfg.name, cfg.projectInstructions);
   }
 
   // auto
@@ -32,5 +32,5 @@ export function createPersona(cfg: PersonaConfig): PersonaEngine {
   }
 
   log.info("未检测到人设层 API 配置，使用离线模板（开箱即跑）");
-  return new TemplatePersona(cfg.name);
+  return new TemplatePersona(cfg.name, cfg.projectInstructions);
 }

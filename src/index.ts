@@ -7,3 +7,5 @@ export type { Config, Profile } from "./core/config";
 export { SessionManager } from "./core/sessionManager";
 export { Store } from "./core/store";
 export * from "./protocol/messages";
+export { HookRunner } from "./hooks/hookRunner";
+export type { Hook, HookContext, HookConfig, HooksConfig, HookEventType } from "./hooks/types";

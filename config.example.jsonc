@@ -61,5 +61,26 @@
   "notifiers": ["powershell", "console"],
 
   // 日记目录（相对项目根）。沿用第二代习惯。
-  "diaryDir": ".codebuddy/memory"
+  "diaryDir": ".codebuddy/memory",
+
+  // ── 工作流 hooks（可选，不配置则 after_task 默认 diary+notify）────────
+  // 可用事件：after_task / on_session_create / on_session_close / on_error
+  // 可用类型：diary / notify / shell / markdown_report
+  // 显式设空数组 [] 可禁用默认行为。
+  // shell hook 可用环境变量: MJ_SESSION_ID MJ_SESSION_NAME MJ_CWD MJ_PROFILE MJ_TEXT MJ_EVENT_TYPE
+  // "hooks": {
+  //   "after_task": [
+  //     { "type": "diary" },
+  //     { "type": "notify" },
+  //     { "type": "shell", "command": "echo 任务完成: %MJ_TEXT%", "cwd": "." },
+  //     { "type": "markdown_report", "output_dir": ".majordomo/reports" }
+  //   ],
+  //   "on_session_create": [
+  //     { "type": "shell", "command": "echo 新会话: %MJ_SESSION_NAME%" }
+  //   ],
+  //   "on_session_close": [],
+  //   "on_error": [
+  //     { "type": "notify" }
+  //   ]
+  // }
 }

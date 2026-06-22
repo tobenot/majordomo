@@ -7,7 +7,10 @@ import { PersonaEngine, PersonaInput } from "./types";
 export class TemplatePersona implements PersonaEngine {
   readonly mode = "template";
 
-  constructor(private personaName: string) {}
+  constructor(
+    private personaName: string,
+    private projectInstructions?: string,
+  ) {}
 
   async report(input: PersonaInput): Promise<string> {
     const { workerText } = input;
@@ -16,10 +19,10 @@ export class TemplatePersona implements PersonaEngine {
 
     const kaomoji = pick(["(≧▽≦)", "ฅ^•ﻌ•^ฅ", "(ノ´ヮ`)ノ*:・゚✧", "(´・ω・`)", "(｡♥‿♥｡)"]);
 
-    if (!brief) {
-      return `主人～ 这一轮工作层没有产出可汇报的内容呢，咱再看看 ${kaomoji}`;
-    }
-    return `主人，本喵汇报一下喵～ 工作层处理了「${truncate(input.userText, 40)}」，结果是：${brief} ${kaomoji}`;
+    const base = brief
+      ? `主人，本喵汇报一下喵～ 工作层处理了「${truncate(input.userText, 40)}」，结果是：${brief}`
+      : `主人～ 这一轮工作层没有产出可汇报的内容呢，咱再看看`;
+    return `${base} ${kaomoji}`;
   }
 }
 

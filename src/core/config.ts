@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { expandHome, globalDir } from "./paths";
 import { createLogger } from "./logger";
+import type { HooksConfig, HookConfig } from "../hooks/types";
 
 const log = createLogger("config");
 
@@ -25,6 +26,8 @@ export interface PersonaConfig {
   mode: "auto" | "api" | "template";
   name: string;
   style: string;
+  /** 从 .majordomo/persona.md 加载的项目专属人设指令。 */
+  projectInstructions?: string;
 }
 
 export interface Config {
@@ -37,6 +40,8 @@ export interface Config {
   persona: PersonaConfig;
   notifiers: string[];
   diaryDir: string;
+  /** 工作流 hooks。不配置则 after_task 默认 diary+notify。 */
+  hooks?: HooksConfig;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -147,6 +152,8 @@ function configCandidates(projectRoot: string): string[] {
     path.join(globalDir(), "config.json"),
     path.join(projectRoot, "config.jsonc"),
     path.join(projectRoot, "config.json"),
+    path.join(projectRoot, ".majordomo", "config.jsonc"),
+    path.join(projectRoot, ".majordomo", "config.json"),
   ];
 }
 
@@ -171,6 +178,16 @@ export function loadConfig(projectRoot: string = process.cwd()): LoadedConfig {
       sources.push(file);
     } catch (e) {
       log.warn(`配置文件解析失败，已跳过: ${file}: ${(e as Error).message}`);
+    }
+  }
+
+  // 加载项目专属人设指令（.majordomo/persona.md）。
+  const personaMd = path.join(projectRoot, ".majordomo", "persona.md");
+  if (fs.existsSync(personaMd)) {
+    const instructions = fs.readFileSync(personaMd, "utf8").trim();
+    if (instructions) {
+      cfg.persona = { ...cfg.persona, projectInstructions: instructions };
+      log.info(`加载项目人设指令: ${personaMd} (${instructions.length} 字符)`);
     }
   }
 
@@ -223,6 +240,25 @@ function normalizeConfig(cfg: Config): Config {
   if (!PERSONA_MODES.has(cfg.persona?.mode)) cfg.persona = { ...DEFAULT_CONFIG.persona, ...cfg.persona, mode: DEFAULT_CONFIG.persona.mode };
   if (!Array.isArray(cfg.notifiers)) cfg.notifiers = DEFAULT_CONFIG.notifiers;
   if (typeof cfg.diaryDir !== "string" || !cfg.diaryDir.trim()) cfg.diaryDir = DEFAULT_CONFIG.diaryDir;
+  // 校验 hooks 配置
+  if (cfg.hooks) {
+    const VALID_EVENTS = new Set(["after_task", "on_session_create", "on_session_close", "on_error"]);
+    for (const [event, hooks] of Object.entries(cfg.hooks)) {
+      if (!VALID_EVENTS.has(event) || !Array.isArray(hooks)) {
+        delete (cfg.hooks as any)[event];
+        log.warn(`hooks.${event} 无效，已忽略`);
+        continue;
+      }
+      for (let i = (hooks as HookConfig[]).length - 1; i >= 0; i--) {
+        const h = (hooks as HookConfig[])[i];
+        if (!h || typeof h.type !== "string") {
+          (hooks as HookConfig[]).splice(i, 1);
+          log.warn(`hooks.${event}[${i}] 格式不正确，已移除`);
+        }
+      }
+    }
+    if (Object.keys(cfg.hooks).length === 0) delete cfg.hooks;
+  }
   return cfg;
 }
 

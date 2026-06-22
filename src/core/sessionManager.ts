@@ -5,6 +5,7 @@ import { Config, resolveProfile } from "./config";
 import { PersonaEngine } from "../persona/types";
 import { createWorker, EngineChoice } from "../worker/factory";
 import { SessionInfo, ServerMessage } from "../protocol/messages";
+import { HookRunner } from "../hooks/hookRunner";
 import { createLogger } from "./logger";
 
 const log = createLogger("session-mgr");
@@ -22,14 +23,40 @@ export class SessionManager {
     private persona: PersonaEngine,
     /** 任意会话产生消息时的广播回调 */
     private onMessage: (msg: ServerMessage) => void,
-    /** 人设层完成一轮汇报时的回调（用于通知 + 日记） */
-    private onReport: (sessionId: string, text: string) => void
+    /** hook 运行器（替换硬编码 diary+notify） */
+    private hooks: HookRunner,
   ) {}
 
   private attach(session: Session): Session {
     session.on("message", (msg: ServerMessage) => {
       this.onMessage(msg);
-      if (msg.type === "persona_message") this.onReport(msg.sessionId, msg.text);
+      if (msg.type === "persona_message") {
+        void this.hooks.fire({
+          eventType: "after_task",
+          sessionId: session.info.id,
+          sessionName: session.info.name,
+          cwd: session.info.cwd,
+          profile: session.info.profile,
+          engine: session.info.engine,
+          text: msg.text,
+          timestamp: new Date().toISOString(),
+          sessionCreatedAt: session.info.createdAt,
+          workerText: session.lastWorkerText,
+          userText: session.lastUserText,
+        });
+      }
+      if (msg.type === "error" && msg.sessionId) {
+        void this.hooks.fire({
+          eventType: "on_error",
+          sessionId: msg.sessionId,
+          sessionName: session.info.name,
+          cwd: session.info.cwd,
+          profile: session.info.profile,
+          engine: session.info.engine,
+          text: msg.message,
+          timestamp: new Date().toISOString(),
+        });
+      }
     });
     this.live.set(session.info.id, session);
     return session;
@@ -71,6 +98,17 @@ export class SessionManager {
     const session = new Session(info, worker, this.persona, this.store);
     this.attach(session);
     log.info(`创建会话 ${id} (${info.name}) profile=${profName} engine=${worker.engineName}`);
+    void this.hooks.fire({
+      eventType: "on_session_create",
+      sessionId: info.id,
+      sessionName: info.name,
+      cwd: info.cwd,
+      profile: info.profile,
+      engine: info.engine,
+      text: "",
+      timestamp: new Date().toISOString(),
+      sessionCreatedAt: info.createdAt,
+    });
     return info;
   }
 
@@ -101,6 +139,17 @@ export class SessionManager {
     const session = new Session(info, worker, this.persona, this.store);
     this.attach(session);
     log.info(`续接会话 ${sessionId} (${info.name}) workerSessionId=${info.workerSessionId ?? "新"}`);
+    void this.hooks.fire({
+      eventType: "on_session_create",
+      sessionId: info.id,
+      sessionName: info.name,
+      cwd: info.cwd,
+      profile: info.profile,
+      engine: info.engine,
+      text: "",
+      timestamp: new Date().toISOString(),
+      sessionCreatedAt: info.createdAt,
+    });
     return info;
   }
 
@@ -125,8 +174,20 @@ export class SessionManager {
   async close(sessionId: string): Promise<void> {
     const s = this.live.get(sessionId);
     if (s) {
+      const info = { ...s.info };
       await s.close();
       this.live.delete(sessionId);
+      void this.hooks.fire({
+        eventType: "on_session_close",
+        sessionId: info.id,
+        sessionName: info.name,
+        cwd: info.cwd,
+        profile: info.profile,
+        engine: info.engine,
+        text: "",
+        timestamp: new Date().toISOString(),
+        sessionCreatedAt: info.createdAt,
+      });
     }
   }
 

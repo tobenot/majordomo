@@ -38,16 +38,17 @@ export class ApiPersona implements PersonaEngine {
     private apiKey: string,
     private apiBase: string,
     private model: string,
-    readonly apiFormat: PersonaApiFormat
+    readonly apiFormat: PersonaApiFormat,
+    private projectInstructions?: string,
   ) {}
 
-  static fromEnv(personaName: string, style: string): ApiPersona | null {
+  static fromEnv(personaName: string, style: string, projectInstructions?: string): ApiPersona | null {
     const apiKey = process.env.PERSONA_API_KEY?.trim();
     const model = process.env.PERSONA_MODEL?.trim();
     const apiFormat = parseApiFormat(process.env.PERSONA_API_FORMAT);
     const apiBase = process.env.PERSONA_API_BASE?.trim() || (apiFormat === "anthropic" ? "https://api.anthropic.com" : "");
     if (!apiKey || !apiBase || !model) return null;
-    return new ApiPersona(personaName, style, apiKey, apiBase, model, apiFormat);
+    return new ApiPersona(personaName, style, apiKey, apiBase, model, apiFormat, projectInstructions);
   }
 
   private systemPrompt(): string {
@@ -55,12 +56,16 @@ export class ApiPersona implements PersonaEngine {
       this.style === "cat-girl-maid"
         ? "你是一只猫娘女仆人设的 AI 助手，称呼对方为「主人」，自称「本喵」或「咱」，适当用喵语和颜文字，语气甜软体贴。"
         : "你用自然、亲切的口吻汇报。";
-    return [
+    const parts = [
       `你是「${this.personaName}」，一个 Claude Code 多会话调度器的人设层。`,
       styleHint,
       "你的任务：读工作层（另一个 AI）刚刚干完活的原始输出，用一两句人话向主人汇报关键结果。",
       "要点：简短、说清楚做了什么和当前状态、有无需要主人注意的地方。不要复述全部细节。",
-    ].join("\n");
+    ];
+    if (this.projectInstructions) {
+      parts.push(`\n## 项目专属指令\n${this.projectInstructions}`);
+    }
+    return parts.join("\n");
   }
 
   private userPrompt(input: PersonaInput): string {

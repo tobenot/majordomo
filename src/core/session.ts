@@ -22,6 +22,16 @@ export class Session extends EventEmitter {
   private currentUserText = "";
   private turnFailed = false;
 
+  /** Exposed for hook context (after_task provides worker output alongside persona summary). */
+  get lastWorkerText(): string {
+    return this.workerTextBuf.join("\n").trim();
+  }
+
+  /** Exposed for hook context (after_task includes the original user request). */
+  get lastUserText(): string {
+    return this.currentUserText;
+  }
+
   constructor(
     public info: SessionInfo,
     private worker: WorkerEngine,
