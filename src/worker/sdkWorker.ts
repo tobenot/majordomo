@@ -92,7 +92,7 @@ export class SdkWorker extends WorkerEngine {
       permissionMode: mapPermissionMode(this.opts.permissionMode),
       canUseTool: this.canUseTool,
       abortController: this.abort,
-      settingSources: ["project", "local"],
+      settingSources: ["user", "project", "local"],
     };
     if (this.opts.maxTurns) options.maxTurns = this.opts.maxTurns;
     if (this.opts.allowedTools?.length) options.allowedTools = this.opts.allowedTools;
