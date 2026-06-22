@@ -267,7 +267,7 @@ export class SdkWorker extends WorkerEngine {
         this.emitText(`[任务更新] ${o.patch?.status}: ${o.patch?.description ?? ""}`);
         break;
       case "thinking_tokens":
-        if (o.estimated_tokens) this.emitText(`[思考] ~${o.estimated_tokens} tokens`);
+        // silent — per-token updates flood the TUI
         break;
       case "worker_shutting_down":
         if (o.reason) this.emitText(`[关闭] ${o.reason}`);
