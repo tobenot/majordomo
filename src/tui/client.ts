@@ -295,7 +295,7 @@ export class TuiClient {
       return;
     }
     // ponytail: show recent 10, rest still resumable by id
-    const shown = sessions.slice(-10);
+    const shown = sessions.slice(0, 10);
     const hidden = sessions.length - shown.length;
     this.println(`${C.cyan}— 会话列表${hidden > 0 ? `（最近 ${shown.length}，${hidden} 条旧会话已隐藏）` : ""} —${C.reset}`);
     for (const s of shown) {
