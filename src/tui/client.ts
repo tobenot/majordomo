@@ -1,6 +1,6 @@
 import * as readline from "readline";
 import { WebSocket } from "ws";
-import { parseServerMessage, ClientMessage, SessionInfo } from "../protocol/messages";
+import { parseServerMessage, ClientMessage, SessionInfo, SessionState } from "../protocol/messages";
 import { renderMarkdown } from "./markdown";
 
 const C = {
@@ -22,6 +22,7 @@ export class TuiClient {
   private ws!: WebSocket;
   private rl!: readline.Interface;
   private currentSession?: string;
+  private sessionState: SessionState = "idle";
   private personaName = "指挥官";
   private pendingPermission?: { requestId: string; sessionId: string };
   private pendingAsk?: { requestId: string; sessionId: string; questions: AskQuestion[] };
@@ -60,9 +61,15 @@ export class TuiClient {
     });
   }
 
+  // ponytail: prompt reflects session state — user always knows if worker is busy
   private prompt(): void {
     const tag = this.currentSession ? this.currentSession : "无会话";
-    this.rl.setPrompt(`${C.cyan}[${tag}]${C.reset} > `);
+    const busy = this.sessionState !== "idle" && this.sessionState !== "closed";
+    const indicator = this.sessionState === "thinking" ? `${C.dim}…${C.reset}` :
+                      this.sessionState === "waiting_permission" ? `${C.yellow}?${C.reset}` :
+                      this.sessionState === "reporting" ? `${C.dim}…${C.reset}` : "";
+    const bracket = busy ? C.dim : C.cyan;
+    this.rl.setPrompt(`${indicator}${bracket}[${tag}]${C.reset} > `);
     this.rl.prompt();
   }
 
@@ -141,6 +148,7 @@ export class TuiClient {
       this.pendingFirstInput = text;
     } else {
       this.send({ type: "user_input", sessionId: this.currentSession, text });
+      this.sessionState = "thinking"; // 乐观更新，prompt 立即显示忙碌
     }
     this.prompt();
   }
@@ -270,6 +278,7 @@ export class TuiClient {
         break;
       case "session_created":
         this.currentSession = msg.session.id;
+        this.sessionState = msg.session.state;
         this.println(`${C.green}● 会话就绪: ${msg.session.name} (${msg.session.id}) engine=${msg.session.engine}${C.reset}`);
         if (this.pendingFirstInput) {
           this.send({ type: "user_input", sessionId: msg.session.id, text: this.pendingFirstInput });
@@ -315,7 +324,11 @@ export class TuiClient {
         }
         break;
       case "session_state":
+        if (msg.sessionId === this.currentSession) {
+          this.sessionState = msg.state;
+        }
         if (msg.state === "thinking") this.println(`${C.dim}…工作层思考中${C.reset}`);
+        if (msg.state === "idle" || msg.state === "error" || msg.state === "closed") this.prompt();
         break;
       case "profile_switched":
         this.println(`${C.green}已切换 profile → ${msg.profile}（只影响新开会话）${C.reset}`);
