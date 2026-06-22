@@ -181,14 +181,24 @@ export function loadConfig(projectRoot: string = process.cwd()): LoadedConfig {
     }
   }
 
-  // 加载项目专属人设指令（.majordomo/persona.md）。
-  const personaMd = path.join(projectRoot, ".majordomo", "persona.md");
-  if (fs.existsSync(personaMd)) {
-    const instructions = fs.readFileSync(personaMd, "utf8").trim();
-    if (instructions) {
-      cfg.persona = { ...cfg.persona, projectInstructions: instructions };
-      log.info(`加载项目人设指令: ${personaMd} (${instructions.length} 字符)`);
+  // 加载人设指令：全局 base + 项目 append。
+  const parts: string[] = [];
+  const globalPersonaMd = path.join(globalDir(), "persona.md");
+  if (fs.existsSync(globalPersonaMd)) {
+    const g = fs.readFileSync(globalPersonaMd, "utf8").trim();
+    if (g) parts.push(g);
+    log.info(`加载全局人设: ${globalPersonaMd} (${g.length} 字符)`);
+  }
+  const projectPersonaMd = path.join(projectRoot, ".majordomo", "persona.md");
+  if (fs.existsSync(projectPersonaMd)) {
+    const p = fs.readFileSync(projectPersonaMd, "utf8").trim();
+    if (p) {
+      parts.push(p);
+      log.info(`加载项目人设: ${projectPersonaMd} (${p.length} 字符)`);
     }
+  }
+  if (parts.length) {
+    cfg.persona = { ...cfg.persona, projectInstructions: parts.join("\n\n") };
   }
 
   cfg = normalizeConfig(cfg);
