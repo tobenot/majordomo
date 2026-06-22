@@ -85,6 +85,15 @@ export class Session extends EventEmitter {
     }
   }
 
+  async interrupt(): Promise<void> {
+    log.info(`打断会话 ${this.info.id}`);
+    await this.worker.interrupt();
+    // worker.interrupt() calls finishTurn which resolves send() promise,
+    // the pump loop catches the abort error and calls finishTurn() which
+    // emits done → our onWorkerEvent handler sets state to idle/reporting.
+    // We don't reset state here — let the event flow handle it.
+  }
+
   resolvePermission(requestId: string, approve: boolean, updatedInput?: Record<string, unknown>): void {
     this.worker.resolvePermission(requestId, approve, updatedInput);
     if (this.info.state === "waiting_permission") this.setState("thinking");

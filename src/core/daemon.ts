@@ -131,6 +131,16 @@ export class CoreDaemon {
         });
         break;
 
+      case "interrupt": {
+        const session = this.mgr.ensureLive(msg.sessionId);
+        if (!session) {
+          this.sendTo(ws, { type: "error", message: `会话不存在: ${msg.sessionId}` });
+          return;
+        }
+        await session.interrupt();
+        break;
+      }
+
       case "user_input": {
         const session = this.mgr.ensureLive(msg.sessionId);
         if (!session) {

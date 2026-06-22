@@ -54,6 +54,7 @@ export type ClientMessage =
   | { type: "user_input"; sessionId: string; text: string }
   /** 透传斜杠命令给工作层 session，例如 /compact /model */
   | { type: "slash"; sessionId: string; command: string; args?: string }
+  | { type: "interrupt"; sessionId: string }
   | { type: "switch_profile"; profile: string }
   | { type: "permission_response"; sessionId: string; requestId: string; approve: boolean; updatedInput?: Record<string, unknown> };
 

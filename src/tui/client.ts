@@ -23,6 +23,7 @@ export class TuiClient {
   private rl!: readline.Interface;
   private currentSession?: string;
   private sessionState: SessionState = "idle";
+  private pendingInput?: string; // queued while session is busy
   private personaName = "指挥官";
   private pendingPermission?: { requestId: string; sessionId: string };
   private pendingAsk?: { requestId: string; sessionId: string; questions: AskQuestion[] };
@@ -56,8 +57,13 @@ export class TuiClient {
     this.prompt();
     this.rl.on("line", (line) => this.onLine(line.trim()));
     this.rl.on("SIGINT", () => {
-      this.println(`\n${C.dim}再见，主人～${C.reset}`);
-      process.exit(0);
+      if (this.currentSession && this.sessionState !== "idle" && this.sessionState !== "error" && this.sessionState !== "closed") {
+        this.send({ type: "interrupt", sessionId: this.currentSession });
+        this.println(`\n${C.yellow}已请求打断…${C.reset}`);
+      } else {
+        this.println(`\n${C.dim}再见，主人～${C.reset}`);
+        process.exit(0);
+      }
     });
   }
 
@@ -146,6 +152,10 @@ export class TuiClient {
     if (!this.currentSession) {
       this.send({ type: "create_session", name: text.slice(0, 20) });
       this.pendingFirstInput = text;
+    } else if (this.sessionState !== "idle" && this.sessionState !== "error" && this.sessionState !== "closed") {
+      // ponytail: busy → queue, auto-send when idle
+      this.pendingInput = text;
+      this.println(`${C.dim}（已排队，回合完成后自动发送）${C.reset}`);
     } else {
       this.send({ type: "user_input", sessionId: this.currentSession, text });
       this.sessionState = "thinking"; // 乐观更新，prompt 立即显示忙碌
@@ -287,7 +297,10 @@ export class TuiClient {
         this.prompt();
         break;
       case "session_closed":
-        if (this.currentSession === msg.sessionId) this.currentSession = undefined;
+        if (this.currentSession === msg.sessionId) {
+          this.currentSession = undefined;
+          this.pendingInput = undefined;
+        }
         this.println(`${C.dim}会话已关闭: ${msg.sessionId}${C.reset}`);
         break;
       case "sessions":
@@ -328,7 +341,17 @@ export class TuiClient {
           this.sessionState = msg.state;
         }
         if (msg.state === "thinking") this.println(`${C.dim}…工作层思考中${C.reset}`);
-        if (msg.state === "idle" || msg.state === "error" || msg.state === "closed") this.prompt();
+        if (msg.state === "idle" || msg.state === "error" || msg.state === "closed") {
+          // ponytail: auto-send queued input after session goes idle
+          if (this.pendingInput && msg.sessionId === this.currentSession) {
+            const text = this.pendingInput;
+            this.pendingInput = undefined;
+            this.println(`${C.dim}> ${text}${C.reset}`);
+            this.submitText(text);
+            break; // submitText already calls prompt()
+          }
+          this.prompt();
+        }
         break;
       case "profile_switched":
         this.println(`${C.green}已切换 profile → ${msg.profile}（只影响新开会话）${C.reset}`);

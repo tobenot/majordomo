@@ -75,6 +75,14 @@ export class MockWorker extends WorkerEngine {
     }
   }
 
+  async interrupt(): Promise<void> {
+    this.pendingPermissions.clear();
+    if (this.running) {
+      this.running = false;
+      this.emitEvent({ kind: "text", text: "（已被打断）" });
+    }
+  }
+
   async close(): Promise<void> {
     this.pendingPermissions.clear();
     this.running = false;

@@ -30,6 +30,7 @@ export class SdkWorker extends WorkerEngine {
   private query?: Query;
   private abort?: AbortController;
   private closed = false;
+  private interrupted = false;
   private currentTurn?: PendingTurn;
   private pendingPermissions = new Map<string, (result: PermissionReply) => void>();
   private turnHadText = false;
@@ -62,6 +63,19 @@ export class SdkWorker extends WorkerEngine {
     if (!resolve) return;
     this.pendingPermissions.delete(requestId);
     resolve({ approve, updatedInput });
+  }
+
+  async interrupt(): Promise<void> {
+    if (!this.currentTurn) return;
+    this.interrupted = true;
+    log.info(`打断 SDK 回合 (session: ${this.workerSessionId ?? "新"})`);
+    try {
+      await this.query?.interrupt();
+    } catch (e) {
+      log.warn(`SDK interrupt 失败: ${(e as Error).message}`);
+    }
+    // finishTurn resolves the pending send() promise, session goes back to idle
+    this.finishTurn();
   }
 
   async close(): Promise<void> {
@@ -149,10 +163,11 @@ export class SdkWorker extends WorkerEngine {
         this.emitEvent({ kind: "error", message: "SDK 工作层会话已结束" });
       }
     } catch (e) {
-      if (!this.closed) {
+      if (!this.interrupted && !this.closed) {
         this.emitEvent({ kind: "error", message: `SDK 工作层失败: ${(e as Error).message}` });
       }
     } finally {
+      this.interrupted = false;
       this.query = undefined;
       this.input?.close();
       this.input = undefined;

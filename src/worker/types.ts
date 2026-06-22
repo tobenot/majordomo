@@ -50,6 +50,9 @@ export abstract class WorkerEngine extends EventEmitter {
   /** 回应一个权限请求。 */
   abstract resolvePermission(requestId: string, approve: boolean, updatedInput?: Record<string, unknown>): void;
 
+  /** 打断当前正在执行的回合（graceful interrupt，wait for current response to settle）。 */
+  abstract interrupt(): Promise<void>;
+
   /** 关闭会话，释放资源。 */
   abstract close(): Promise<void>;
 
