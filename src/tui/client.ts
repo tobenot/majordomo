@@ -66,12 +66,19 @@ export class TuiClient {
     this.rl.prompt();
   }
 
+  private inlineMode = false;
+
   private println(s: string): void {
+    const isInline = s.startsWith("\r");
+    if (isInline) s = s.slice(1);
     if (this.rl) {
       readline.cursorTo(process.stdout, 0);
       readline.clearLine(process.stdout, 0);
     }
-    process.stdout.write(s + "\n");
+    // ponytail: \r-prefixed messages overwrite same line (thinking_tokens counter)
+    if (!isInline && this.inlineMode) process.stdout.write("\n");
+    process.stdout.write(s + (isInline ? "" : "\n"));
+    this.inlineMode = isInline;
     if (this.rl) this.rl.prompt(true);
   }
 
