@@ -7,6 +7,8 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import * as fs from "fs";
+import * as path from "path";
 import { randomUUID } from "crypto";
 import { WorkerEngine } from "./types";
 import { createLogger } from "../core/logger";
@@ -101,6 +103,20 @@ export class SdkWorker extends WorkerEngine {
     // ponytail: only pass native binaries to SDK (.cmd/.bat are wrappers)
     if (executable && !/\.(cmd|bat)$/i.test(executable)) {
       options.pathToClaudeCodeExecutable = executable;
+    }
+
+    // 注入项目行为规则（.majordomo/rules.md），走 systemPrompt.append 而非修改 CLAUDE.md
+    const rulesPath = path.join(this.opts.cwd, ".majordomo", "rules.md");
+    if (fs.existsSync(rulesPath)) {
+      const rules = fs.readFileSync(rulesPath, "utf8").trim();
+      if (rules) {
+        options.systemPrompt = {
+          type: "preset",
+          preset: "claude_code",
+          append: `\n\n---\n## Project Rules (from .majordomo/rules.md)\n${rules}`,
+        };
+        log.debug(`注入项目行为规则: ${rulesPath} (${rules.length} 字符)`);
+      }
     }
 
     return options;

@@ -19,11 +19,12 @@
 
 | 文件 | 谁读 | 放什么 |
 |------|------|--------|
-| `CLAUDE.md` | SDK Worker（工作层） | **行为规则 + 代码架构** |
+| `CLAUDE.md` | SDK Worker（settingSources） | **纯代码架构**（命令、分层、关键文件） |
+| `.majordomo/rules.md` | SDK Worker（systemPrompt 注入） | **行为规则**（Just Do It / Must Ask / 长任务模式） |
 | `.majordomo/persona.md` | 人设层 API / 模板 | **说话风格**（语气、颜文字、称呼） |
 | `.majordomo/config.jsonc` | HookRunner | **工作流触发**（diary/notify/shell/report） |
 
-> **关键区分**：人设层 = 嘴（只润色语言），工作层 = 手（干活+遵守行为规则）。行为规则必须放在工作层能读到的地方（CLAUDE.md），放进 persona.md 没用——工作层根本看不到。
+> **关键设计**：`rules.md` 不放在 CLAUDE.md 里——majordomo 读取后通过 SDK 的 `systemPrompt.append` 注入工作层，和 CLAUDE.md 同等耐久（跨 compaction 不丢），但保持了 CLAUDE.md 的纯粹性。已有长 CLAUDE.md 的项目无需修改——直接创建 `.majordomo/rules.md` 即可，两套行为规则会叠加生效。
 
 ## 迁移步骤（一个项目约 5 分钟）
 
@@ -35,26 +36,30 @@ mkdir -p .majordomo/reports
 
 ### 第二步：拆分 CLAUDE.md
 
-打开你现有的 `CLAUDE.md`，把内容分成三份：
+打开你现有的 `CLAUDE.md`，把内容分成四份：
 
-**留在 CLAUDE.md 的（行为规则 + 代码架构）：**
-- "可以直接做" vs "必须先问" 清单（工作层需要读）
+**留在 CLAUDE.md 的（纯代码架构）：**
+- 常用命令（build / test / lint）
+- 架构概述、数据流
+- 关键设计决策
+- 关键文件索引
+
+**移到 `.majordomo/rules.md` 的（行为规则）：**
+- "可以直接做" vs "必须先问" 清单
 - 长任务模式规则
 - "别过度热心"规则
-- 常用命令（build / test / lint）
-- 架构概述、数据流、关键设计决策
-- 关键文件索引
 
 **移到 `.majordomo/persona.md` 的（只有说话风格）：**
 - 口吻设定（猫娘 maid / 专业 / 随意）
 - 称呼习惯（"主人" / "你" / 无特定称呼）
-- 颜文字偏好
-- 喵语习惯
+- 颜文字偏好、喵语习惯
 - 汇报格式偏好
 
 **删掉（hook 系统接管了）：**
 - `powershell write-diary + notify-done` 手动命令
 - "每次回复末尾做 X" 类指令
+
+> **已有长 CLAUDE.md 的项目不需要大改**：可以保留原样不动，只创建 `.majordomo/rules.md` 写行为规则。两套内容会叠加生效。
 - 健康提示规则（通常放在全局层）
 
 ### 第三步：创建 `.majordomo/config.jsonc`

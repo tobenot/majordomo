@@ -2,40 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **majordomo 自举**：本项目用 majordomo 开发自己。说话风格由 `.majordomo/persona.md` 管理人设层；日记/通知由 hook 系统自动触发。本文档 = 行为规则 + 代码架构。
-
-## Behavior Rules
-
-以下规则由工作层（Claude Code SDK）直接读取，控制"什么可以自己做、什么必须先问"。
-
-### Just Do It（操作类任务，直接动手）
-
-- 凌乱的临时文件、混乱的目录
-- 文档落后于代码、验收文档需要维护
-- 缺失的 import、明显的拼写/格式错误
-- 编辑代码后可选择性跑 build（忽略 exit code 6）
-- 大改动后扫描一次同级/模板相似文件是否需要同步修改
-- 日记和通知由 hook 系统自动处理，**无需手动调用**
-
-### Must Ask First（思考类任务，必须先问）
-
-- 需求不明确、目标模糊
-- 发明新概念或不在 spec 中的命名
-- 重命名/删除文件、修改核心系统、添加新依赖、改变公共 API
-- 架构取舍
-
-### Long-Task Mode
-
-当主人说"长任务"、"take your time"、"I'll be back later"：
-- 假设主人至少离开 30 分钟，不中途暂停提问
-- 卡住：加日志 → 搜索 → 尝试替代方案 → 3 次失败后停止
-- 完成后交付完整交接报告
-
-### Don't Be Over-Eager
-
-- **不要主动同步规则文件**之间
-- 不要自说自话重构或统一代码风格
-- 不要替主人发明新名字
+> **majordomo 自举**：本项目用 majordomo 开发自己。行为规则 → `.majordomo/rules.md`（SDK systemPrompt 注入）；说话风格 → `.majordomo/persona.md`（人设层读取）；日记/通知 → hook 系统自动触发。本文档只含代码架构。
 
 ## Common Commands
 
