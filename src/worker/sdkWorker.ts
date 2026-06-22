@@ -177,13 +177,13 @@ export class SdkWorker extends WorkerEngine {
         if (o.error) this.emitEvent({ kind: "error", message: o.error });
         break;
       case "tool_progress":
-        this.emitText(`[工具进度] ${o.tool_name} ${o.elapsed_time_seconds.toFixed(1)}s`);
+        this.emitText(`[工具进度] ${o.tool_name} ${o.elapsed_time_seconds?.toFixed(1) ?? "?"}s`);
         break;
       case "rate_limit_event":
-        this.emitText(`[速率限制] ${o.rate_limit_info?.status}`);
+        if (o.rate_limit_info?.status) this.emitText(`[速率限制] ${o.rate_limit_info.status}`);
         break;
       case "prompt_suggestion":
-        this.emitText(`[建议] ${o.suggestion}`);
+        if (o.suggestion) this.emitText(`[建议] ${o.suggestion}`);
         break;
       case "user":
         if (o.message?.content) {
@@ -250,10 +250,10 @@ export class SdkWorker extends WorkerEngine {
         this.emitText(`[任务更新] ${o.patch?.status}: ${o.patch?.description ?? ""}`);
         break;
       case "thinking_tokens":
-        this.emitText(`[思考] ~${o.estimated_tokens} tokens`);
+        if (o.estimated_tokens) this.emitText(`[思考] ~${o.estimated_tokens} tokens`);
         break;
       case "worker_shutting_down":
-        this.emitText(`[关闭] ${o.reason}`);
+        if (o.reason) this.emitText(`[关闭] ${o.reason}`);
         break;
       case "memory_recall":
         this.emitText(`[记忆] ${o.mode}: ${o.memories?.length ?? 0} 条`);
@@ -269,28 +269,28 @@ export class SdkWorker extends WorkerEngine {
         break;
       case "hook_progress":
       case "hook_response": {
-        const out = o.output ? `: ${o.output.slice(0, 100)}` : "";
+        const out = typeof o.output === "string" ? `: ${o.output.slice(0, 100)}` : "";
         const label = o.subtype === "hook_response" ? (o.outcome ?? "done") : "...";
         this.emitText(`[钩子] ${o.hook_name} ${label}${out}`);
         break;
       }
       case "plugin_install":
-        this.emitText(`[插件] ${o.status}: ${o.name ?? ""}`);
+        if (o.status) this.emitText(`[插件] ${o.status}: ${o.name ?? "?"}`);
         break;
       case "api_retry":
-        this.emitText(`[API重试] ${o.attempt}/${o.max_retries} (${o.retry_delay_ms}ms)`);
+        this.emitText(`[API重试] ${o.attempt}/${o.max_retries} (${o.retry_delay_ms ?? "?"}ms)`);
         break;
       case "local_command_output":
-        this.emitText(o.content?.slice(0, 200));
+        if (o.content) this.emitText(o.content.slice(0, 200));
         break;
       case "mirror_error":
-        this.emitText(`[转录错误] ${o.error}`);
+        if (o.error) this.emitText(`[转录错误] ${o.error}`);
         break;
       case "elicitation_complete":
-        this.emitText(`[引导完成] ${o.mcp_server_name}`);
+        if (o.mcp_server_name) this.emitText(`[引导完成] ${o.mcp_server_name}`);
         break;
       case "session_state_changed":
-        this.emitText(`[会话状态] ${o.state}`);
+        if (o.state) this.emitText(`[会话状态] ${o.state}`);
         break;
       case "commands_changed":
         // silent - internal command registry updates
