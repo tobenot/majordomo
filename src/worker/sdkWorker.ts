@@ -144,58 +144,159 @@ export class SdkWorker extends WorkerEngine {
     }
   }
 
+  // ponytail: handle all SDK message types via any-typed accessor (union is too sprawling)
   private handleSdkMessage(obj: SDKMessage): void {
     if (!obj || typeof obj !== "object") return;
-    const sessionId = (obj as { session_id?: string }).session_id;
+    const o = obj as any;
+    const sessionId = o.session_id;
     if (sessionId && sessionId !== this.workerSessionId) {
       this.workerSessionId = sessionId;
       this.emitEvent({ kind: "session_id", id: sessionId });
     }
 
-    switch (obj.type) {
+    switch (o.type) {
       case "system":
-        this.handleSystemMessage(obj);
+        this.handleSystemMessage(o);
         break;
       case "assistant":
-        this.emitAssistantContent(obj.message?.content ?? []);
+        this.emitAssistantContent(o.message?.content ?? []);
         break;
       case "result":
-        if (obj.subtype !== "success") {
-          this.emitEvent({ kind: "error", message: `SDK result ${obj.subtype}` });
-        } else if (obj.result?.trim() && !this.turnHadText) {
-          this.emitText(obj.result);
+        if (o.subtype !== "success") {
+          this.emitEvent({ kind: "error", message: `SDK result ${o.subtype}` });
+        } else if (o.result?.trim() && !this.turnHadText) {
+          this.emitText(o.result);
         }
         this.finishTurn();
         break;
       case "tool_use_summary":
-        this.emitText(`[工具摘要] ${obj.summary}`);
+        this.emitText(`[工具摘要] ${o.summary}`);
         break;
       case "auth_status":
-        if (obj.output.length) this.emitText(`[认证] ${obj.output.join("\n")}`);
-        if (obj.error) this.emitEvent({ kind: "error", message: obj.error });
+        if (o.output?.length) this.emitText(`[认证] ${o.output.join("\n")}`);
+        if (o.error) this.emitEvent({ kind: "error", message: o.error });
+        break;
+      case "tool_progress":
+        this.emitText(`[工具进度] ${o.tool_name} ${o.elapsed_time_seconds.toFixed(1)}s`);
+        break;
+      case "rate_limit_event":
+        this.emitText(`[速率限制] ${o.rate_limit_info?.status}`);
+        break;
+      case "prompt_suggestion":
+        this.emitText(`[建议] ${o.suggestion}`);
+        break;
+      case "user":
+        if (o.message?.content) {
+          if (typeof o.message.content === "string") {
+            this.emitText(`[已发送] ${o.message.content}`);
+          } else if (Array.isArray(o.message.content)) {
+            for (const block of o.message.content) {
+              if (block.type === "text" && block.text) this.emitText(`[用户] ${block.text}`);
+            }
+          }
+        }
         break;
       default:
+        log.debug(`未处理的 SDK 消息类型: ${o.type}`);
         break;
     }
   }
 
-  private handleSystemMessage(obj: Extract<SDKMessage, { type: "system" }>): void {
-    switch (obj.subtype) {
+  // ponytail: handle all system subtypes in one switch
+  private handleSystemMessage(o: any): void {
+    switch (o.subtype) {
       case "init":
-        log.debug(`SDK init session=${obj.session_id ?? "?"}`);
+        log.debug(`SDK init session=${o.session_id ?? "?"}`);
         break;
       case "compact_boundary":
         this.emitText(
-          `[上下文压缩] ${obj.compact_metadata.trigger} compact: ${obj.compact_metadata.pre_tokens} → ${obj.compact_metadata.post_tokens ?? "?"} tokens`
+          `[上下文压缩] ${o.compact_metadata.trigger} compact: ${o.compact_metadata.pre_tokens} → ${o.compact_metadata.post_tokens ?? "?"} tokens`
         );
         break;
       case "permission_denied":
-        this.emitText(`[权限拒绝] ${obj.tool_name}: ${obj.message}`);
+        this.emitText(`[权限拒绝] ${o.tool_name}: ${o.message}`);
         break;
       case "notification":
-        this.emitText(`[通知] ${obj.text}`);
+        this.emitText(`[通知] ${o.text}`);
+        break;
+      case "status":
+        if (o.status) this.emitText(`[状态] ${o.status}`);
+        break;
+      case "informational":
+        this.emitText(`[${o.level ?? "info"}] ${o.content}`);
+        break;
+      case "model_refusal_fallback":
+        this.emitText(`[模型回退] ${o.trigger}: ${o.original_model} → ${o.fallback_model}`);
+        break;
+      case "task_notification": {
+        const usage = o.usage
+          ? ` (${o.usage.total_tokens}t ${o.usage.tool_uses}工具 ${o.usage.duration_ms}ms)`
+          : "";
+        const statusLabel =
+          o.status === "completed" ? "完成" : o.status === "failed" ? "失败" : "停止";
+        this.emitText(`[任务${statusLabel}] ${o.summary}${usage}`);
+        break;
+      }
+      case "task_started":
+        this.emitText(`[任务开始] ${o.description}`);
+        break;
+      case "task_progress": {
+        const u = o.usage;
+        const usage = u ? ` ${u.total_tokens}t ${u.tool_uses}工具 ${Math.round(u.duration_ms / 1000)}s` : "";
+        this.emitText(`[任务进度] ${o.description}${usage}`);
+        break;
+      }
+      case "task_updated":
+        this.emitText(`[任务更新] ${o.patch?.status}: ${o.patch?.description ?? ""}`);
+        break;
+      case "thinking_tokens":
+        this.emitText(`[思考] ~${o.estimated_tokens} tokens`);
+        break;
+      case "worker_shutting_down":
+        this.emitText(`[关闭] ${o.reason}`);
+        break;
+      case "memory_recall":
+        this.emitText(`[记忆] ${o.mode}: ${o.memories?.length ?? 0} 条`);
+        break;
+      case "files_persisted": {
+        const ok = o.files?.length ?? 0;
+        const fail = o.failed?.length ?? 0;
+        if (ok || fail) this.emitText(`[文件持久化] ${ok} ok${fail ? `, ${fail} 失败` : ""}`);
+        break;
+      }
+      case "hook_started":
+        this.emitText(`[钩子] ${o.hook_name} (${o.hook_event}) 开始`);
+        break;
+      case "hook_progress":
+      case "hook_response": {
+        const out = o.output ? `: ${o.output.slice(0, 100)}` : "";
+        const label = o.subtype === "hook_response" ? (o.outcome ?? "done") : "...";
+        this.emitText(`[钩子] ${o.hook_name} ${label}${out}`);
+        break;
+      }
+      case "plugin_install":
+        this.emitText(`[插件] ${o.status}: ${o.name ?? ""}`);
+        break;
+      case "api_retry":
+        this.emitText(`[API重试] ${o.attempt}/${o.max_retries} (${o.retry_delay_ms}ms)`);
+        break;
+      case "local_command_output":
+        this.emitText(o.content?.slice(0, 200));
+        break;
+      case "mirror_error":
+        this.emitText(`[转录错误] ${o.error}`);
+        break;
+      case "elicitation_complete":
+        this.emitText(`[引导完成] ${o.mcp_server_name}`);
+        break;
+      case "session_state_changed":
+        this.emitText(`[会话状态] ${o.state}`);
+        break;
+      case "commands_changed":
+        // silent - internal command registry updates
         break;
       default:
+        log.debug(`未处理的 system subtype: ${o.subtype}`);
         break;
     }
   }
