@@ -23,6 +23,9 @@
 | `.majordomo/rules.md` | SDK Worker（systemPrompt 注入） | **行为规则**（Just Do It / Must Ask / 长任务模式） |
 | `.majordomo/persona.md` | 人设层 API / 模板 | **说话风格**（语气、颜文字、称呼） |
 | `.majordomo/config.jsonc` | HookRunner | **工作流触发**（diary/notify/shell/report） |
+| `.env` | majordomo 启动 / Persona | **敏感配置**（API key、token、端点地址） |
+
+> **安全边界**：`.majordomo/` 三个文件进 git 仓库（多设备共享），`.env` 不进仓库。敏感信息（PERSONA_API_KEY、PERSONA_API_BASE 等）一律放 `.env`，`.env.example` 作为模板提交。
 
 > **关键设计**：`rules.md` 不放在 CLAUDE.md 里——majordomo 读取后通过 SDK 的 `systemPrompt.append` 注入工作层，和 CLAUDE.md 同等耐久（跨 compaction 不丢），但保持了 CLAUDE.md 的纯粹性。已有长 CLAUDE.md 的项目无需修改——直接创建 `.majordomo/rules.md` 即可，两套行为规则会叠加生效。
 
