@@ -14,26 +14,44 @@ const C = {
   bold: "\x1b[1m",
 };
 
-// ponytail: bracketed paste markers — terminal wraps pasted content in these
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
 
+type PromptMode = "normal" | "permission" | "ask";
+
+function visLen(s: string): number {
+  return s.replace(/\x1b\[[0-9;]*m/g, "").length;
+}
+
 /**
  * TUI 客户端：连到 core daemon，发送指令、渲染结构化消息。
- * 这是给纯键盘党 / 服务器场景用的前端，看的是和 Web 面板同一份状态。
+ * Phase 2: raw mode stdin, multi-line buffer, no readline.
  */
 export class TuiClient {
   private ws!: WebSocket;
-  private rl!: readline.Interface;
   private currentSession?: string;
   private sessionState: SessionState = "idle";
-  private pendingInput?: string; // queued while session is busy
+  private pendingInput?: string;
   private personaName = "指挥官";
   private pendingPermission?: { requestId: string; sessionId: string };
   private pendingAsk?: { requestId: string; sessionId: string; questions: AskQuestion[] };
-  // ponytail: paste confirmation — multi-line paste isn't auto-submitted, user can review/discard
-  private pendingPaste?: string;
-  private ctrlJNext = false;
+
+  // ── raw mode state ──
+  private buf = "";
+  private cursor = 0;
+  private history: string[] = [];
+  private historyIdx = -1;
+  private renderedLines = 0;
+
+  // ponytail: special input modes for permission/ask — single-line blocking
+  private promptMode: PromptMode = "normal";
+  private specialBuf = "";
+
+  // ponytail: paste accumulation in raw mode — bracketed markers or char-by-char
+  private pasting = false;
+
+  // misc
+  private pendingFirstInput?: string;
   private lastEscTime = 0;
 
   constructor(private url: string) {}
@@ -43,7 +61,7 @@ export class TuiClient {
       this.ws = new WebSocket(this.url);
       this.ws.on("open", () => {
         this.send({ type: "hello", client: "tui" });
-        this.setupReadline();
+        this.setupRawMode();
         resolve();
       });
       this.ws.on("message", (d) => this.onMessage(d.toString()));
@@ -59,259 +77,380 @@ export class TuiClient {
     if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
-  private setupReadline(): void {
+  // ── raw mode ───────────────────────────────────────────
+
+  private setupRawMode(): void {
     readline.emitKeypressEvents(process.stdin);
-    const history: string[] = [];
-    this.rl = readline.createInterface({ input: process.stdin, output: process.stdout, history });
-    process.stdout.write("\x1b[?2004h"); // ponytail: enable bracketed paste mode
-    process.on("exit", () => process.stdout.write("\x1b[?2004l"));
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+
     this.printBanner();
-    this.prompt();
-    this.rl.on("line", (line) => this.onLine(line));
-    this.rl.on("SIGINT", () => {
-      if (this.currentSession && this.sessionState !== "idle" && this.sessionState !== "error" && this.sessionState !== "closed") {
-        // ponytail: interrupt clears the queued input — pasted floods don't keep firing after Ctrl+C
-        this.pendingInput = undefined;
-        this.buffer = [];
-        this.pasteBuf = null;
-        if (this.pasteDebounceTimer) { clearTimeout(this.pasteDebounceTimer); this.pasteDebounceTimer = null; }
-        this.pasteDebounceLines = [];
-        this.pendingPaste = undefined;
-        this.send({ type: "interrupt", sessionId: this.currentSession });
-        this.println(`\n${C.yellow}已请求打断（排队已清空）…${C.reset}`);
-      } else {
-        this.println(`\n${C.dim}再见，主人～${C.reset}`);
-        process.exit(0);
-      }
-    });
-    process.stdin.on("keypress", (_str, key) => {
-      if (key.ctrl && key.name === "j") {
-        this.ctrlJNext = true;
-        this.rl.write("\n");
+    this.renderBuffer();
+
+    process.stdin.on("keypress", (str, key) => {
+      if (key.ctrl && key.name === "c") {
+        this.handleCtrlC();
         return;
       }
-      if (key.ctrl && key.name === "l") {
+      if (this.promptMode !== "normal") {
+        this.handleSpecialKeypress(str, key);
+        return;
+      }
+      // bracketed paste markers
+      if (key.sequence === PASTE_START) {
+        this.pasting = true;
+        return;
+      }
+      if (this.pasting) {
+        if (key.sequence === PASTE_END) {
+          this.pasting = false;
+          this.renderBuffer();
+          return;
+        }
+        // accumulate paste text
+        if (str) {
+          this.insertAtCursor(str);
+          this.renderBuffer();
+        }
+        return;
+      }
+      // ConPTY fallback: key.sequence might contain paste markers embedded in longer seq
+      if (key.sequence?.includes(PASTE_START)) {
+        this.pasting = true;
+        this.insertAtCursor(key.sequence.replace(PASTE_START, "").replace(PASTE_END, ""));
+        this.renderBuffer();
+        return;
+      }
+      if (key.sequence?.includes(PASTE_END)) {
+        this.pasting = false;
+        this.renderBuffer();
+        return;
+      }
+
+      // normal editing dispatch
+      if (key.name === "return" && !key.shift) {
+        this.submit();
+      } else if ((key.name === "return" && key.shift) || (key.ctrl && key.name === "j")) {
+        this.insertAtCursor("\n");
+        this.renderBuffer();
+      } else if (key.name === "backspace") {
+        if (this.cursor > 0) {
+          this.buf = this.buf.slice(0, this.cursor - 1) + this.buf.slice(this.cursor);
+          this.cursor--;
+          this.historyIdx = -1;
+          this.renderBuffer();
+        }
+      } else if (key.name === "delete") {
+        if (this.cursor < this.buf.length) {
+          this.buf = this.buf.slice(0, this.cursor) + this.buf.slice(this.cursor + 1);
+          this.historyIdx = -1;
+          this.renderBuffer();
+        }
+      } else if (key.name === "left" || (key.ctrl && key.name === "b")) {
+        if (this.cursor > 0) { this.cursor--; this.renderBuffer(); }
+      } else if (key.name === "right" || (key.ctrl && key.name === "f")) {
+        if (this.cursor < this.buf.length) { this.cursor++; this.renderBuffer(); }
+      } else if ((key.ctrl && key.name === "a") || key.name === "home") {
+        this.cursorToLineStart();
+        this.renderBuffer();
+      } else if ((key.ctrl && key.name === "e") || key.name === "end") {
+        this.cursorToLineEnd();
+        this.renderBuffer();
+      } else if (key.ctrl && key.name === "k") {
+        this.deleteToLineEnd();
+        this.renderBuffer();
+      } else if (key.ctrl && key.name === "u") {
+        this.deleteToLineStart();
+        this.renderBuffer();
+      } else if (key.ctrl && key.name === "w") {
+        this.deleteWordBackward();
+        this.renderBuffer();
+      } else if (key.ctrl && key.name === "l") {
         process.stdout.write("\x1b[2J\x1b[H");
-        this.rl.prompt(true);
-        return;
-      }
-      if (key.name === "escape") {
+        this.renderedLines = 0;
+        this.renderBuffer();
+      } else if (key.name === "up") {
+        this.historyUp();
+        this.renderBuffer();
+      } else if (key.name === "down") {
+        this.historyDown();
+        this.renderBuffer();
+      } else if (key.name === "escape") {
         const now = Date.now();
-        if (this.pendingPaste && now - this.lastEscTime < 500) {
-          this.pendingPaste = undefined;
-          this.println(`${C.yellow}粘贴块已删除${C.reset}`);
+        if (this.buf && now - this.lastEscTime < 500) {
+          this.buf = "";
+          this.cursor = 0;
+          this.historyIdx = -1;
+          this.println(`${C.yellow}已清空${C.reset}`);
         }
         this.lastEscTime = now;
+        this.renderBuffer();
+      } else if (str && !key.ctrl && !key.meta) {
+        this.insertAtCursor(str);
+        this.historyIdx = -1;
+        this.renderBuffer();
       }
     });
+
+    process.stdout.on("resize", () => this.renderBuffer());
+    process.on("exit", () => { try { process.stdin.setRawMode(false); } catch { /* */ } });
   }
 
-  // ponytail: prompt reflects session state — user always knows if worker is busy
-  private prompt(): void {
-    if (this.pendingPaste) {
-      const lines = this.pendingPaste.split("\n").length;
-      this.rl.setPrompt(`${C.yellow}[累积 ${lines} 行，继续粘贴/打字发送，空行删除]${C.reset} > `);
-      this.rl.prompt();
+  // ── buffer ops ─────────────────────────────────────────
+
+  private insertAtCursor(s: string): void {
+    this.buf = this.buf.slice(0, this.cursor) + s + this.buf.slice(this.cursor);
+    this.cursor += s.length;
+  }
+
+  private cursorToLineStart(): void {
+    const prev = this.buf.lastIndexOf("\n", this.cursor - 1);
+    this.cursor = prev >= 0 ? prev + 1 : 0;
+  }
+
+  private cursorToLineEnd(): void {
+    const next = this.buf.indexOf("\n", this.cursor);
+    this.cursor = next >= 0 ? next : this.buf.length;
+  }
+
+  private deleteToLineEnd(): void {
+    const next = this.buf.indexOf("\n", this.cursor);
+    const end = next >= 0 ? next : this.buf.length;
+    if (end > this.cursor) {
+      this.buf = this.buf.slice(0, this.cursor) + this.buf.slice(end);
+      this.historyIdx = -1;
+    }
+  }
+
+  private deleteToLineStart(): void {
+    const prev = this.buf.lastIndexOf("\n", this.cursor - 1);
+    const start = prev >= 0 ? prev + 1 : 0;
+    if (this.cursor > start) {
+      this.buf = this.buf.slice(0, start) + this.buf.slice(this.cursor);
+      this.cursor = start;
+      this.historyIdx = -1;
+    }
+  }
+
+  private deleteWordBackward(): void {
+    const before = this.buf.slice(0, this.cursor);
+    const m = before.match(/(\S+|\s+)$/);
+    if (m) {
+      this.buf = before.slice(0, before.length - m[0].length) + this.buf.slice(this.cursor);
+      this.cursor -= m[0].length;
+      this.historyIdx = -1;
+    }
+  }
+
+  // ── history ────────────────────────────────────────────
+
+  private historyUp(): void {
+    if (!this.history.length) return;
+    if (this.historyIdx === -1) {
+      this.historyIdx = this.history.length - 1;
+    } else if (this.historyIdx > 0) {
+      this.historyIdx--;
+    }
+    this.buf = this.history[this.historyIdx];
+    this.cursor = this.buf.length;
+  }
+
+  private historyDown(): void {
+    if (this.historyIdx === -1) return;
+    if (this.historyIdx < this.history.length - 1) {
+      this.historyIdx++;
+      this.buf = this.history[this.historyIdx];
+    } else {
+      this.historyIdx = -1;
+      this.buf = "";
+    }
+    this.cursor = this.buf.length;
+  }
+
+  // ── submit ─────────────────────────────────────────────
+
+  private submit(): void {
+    const text = this.buf.trim();
+    this.buf = "";
+    this.cursor = 0;
+    this.historyIdx = -1;
+
+    if (!text) { this.renderBuffer(); return; }
+    if (text.startsWith("/")) { this.handleCommand(text); return; }
+
+    if (text && !text.startsWith("/")) {
+      this.history.push(text);
+      // ponytail: cap history to prevent memory leak
+      if (this.history.length > 1000) this.history.shift();
+    }
+    this.submitText(text);
+  }
+
+  // ── special modes (permission / ask) ───────────────────
+
+  private handleSpecialKeypress(str: string, key: { name: string; ctrl?: boolean }): void {
+    if (key.name === "return") {
+      const answer = this.specialBuf;
+      this.specialBuf = "";
+      if (this.promptMode === "permission") {
+        this.promptMode = "normal";
+        this.handlePermissionAnswer(answer);
+      } else if (this.promptMode === "ask") {
+        this.promptMode = "normal";
+        this.handleAskAnswer(answer);
+      }
+      this.renderBuffer();
       return;
     }
+    if (key.ctrl && key.name === "c") {
+      this.specialBuf = "";
+      if (this.promptMode === "permission") {
+        this.promptMode = "normal";
+        this.handlePermissionAnswer("n");
+      } else if (this.promptMode === "ask") {
+        this.promptMode = "normal";
+        this.handleAskAnswer("");
+      }
+      this.renderBuffer();
+      return;
+    }
+    if (key.name === "backspace") {
+      if (this.specialBuf.length > 0) {
+        this.specialBuf = this.specialBuf.slice(0, -1);
+      }
+    } else if (str && !key.ctrl) {
+      this.specialBuf += str;
+    }
+    this.renderBuffer();
+  }
+
+  // ── render ─────────────────────────────────────────────
+
+  private renderBuffer(): void {
+    // clear previous render
+    if (this.renderedLines > 0) {
+      process.stdout.write(`\x1b[${this.renderedLines}A\x1b[0J`);
+    }
+
     const tag = this.currentSession ? this.currentSession : "无会话";
     const busy = this.sessionState !== "idle" && this.sessionState !== "closed";
     const indicator = this.sessionState === "thinking" ? `${C.dim}…${C.reset}` :
                       this.sessionState === "waiting_permission" ? `${C.yellow}?${C.reset}` :
                       this.sessionState === "reporting" ? `${C.dim}…${C.reset}` : "";
     const bracket = busy ? C.dim : C.cyan;
-    this.rl.setPrompt(`${indicator}${bracket}[${tag}]${C.reset} > `);
-    this.rl.prompt();
+    const prefix = `${indicator}${bracket}[${tag}]${C.reset} > `;
+    const pw = visLen(prefix);
+    const indent = " ".repeat(pw);
+    const cols = process.stdout.columns || 80;
+
+    let cursorRow = 0, cursorCol = pw;
+    let out = prefix;
+    let lineCount = 1;
+
+    const text = this.promptMode !== "normal" ? this.specialBuf : this.buf;
+
+    // ponytail: special mode prompt overrides prefix
+    if (this.promptMode === "permission") {
+      process.stdout.write(`\x1b[0G\x1b[0K${C.yellow}批准吗? (y/n): ${this.specialBuf}${C.reset}`);
+      this.renderedLines = 1;
+      return;
+    }
+    if (this.promptMode === "ask") {
+      process.stdout.write(`\x1b[0G\x1b[0K${C.yellow}输入编号选择 (回车取消): ${this.specialBuf}${C.reset}`);
+      this.renderedLines = 1;
+      return;
+    }
+
+    // find cursor screen position by iterating characters
+    let col = pw;
+    let row = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (i === this.cursor) { cursorRow = row; cursorCol = col; }
+      if (text[i] === "\n") {
+        out += "\n" + indent;
+        row++;
+        col = pw;
+        lineCount = row + 1;
+        continue;
+      }
+      out += text[i];
+      col++;
+      if (col >= cols) {
+        // ponytail: naive wrap — no word boundary detection, add when needed
+        col = pw;
+        row++;
+        lineCount = row + 1;
+      }
+    }
+    if (this.cursor >= text.length) {
+      cursorRow = row;
+      cursorCol = col;
+    }
+
+    process.stdout.write(out);
+
+    // position cursor
+    const up = lineCount - 1 - cursorRow;
+    if (up > 0) process.stdout.write(`\x1b[${up}A`);
+    process.stdout.write(`\x1b[${cursorCol + 1}G`);
+
+    this.renderedLines = lineCount;
   }
 
-  private inlineMode = false;
+  // ── output ─────────────────────────────────────────────
+
+  private clearRender(): void {
+    if (this.renderedLines > 0) {
+      process.stdout.write(`\x1b[${this.renderedLines}A\x1b[0J`);
+    }
+  }
 
   private println(s: string): void {
-    if (this.inlineMode) {
-      process.stdout.write("\n");
-      this.inlineMode = false;
-    }
+    this.clearRender();
     process.stdout.write(s + "\n");
-    if (this.rl) this.rl.prompt(true);
+    this.renderBuffer();
   }
+
+  // ── control ────────────────────────────────────────────
+
+  private handleCtrlC(): void {
+    this.buf = "";
+    this.cursor = 0;
+    this.historyIdx = -1;
+    if (this.currentSession && this.sessionState !== "idle" && this.sessionState !== "error" && this.sessionState !== "closed") {
+      this.pendingInput = undefined;
+      this.send({ type: "interrupt", sessionId: this.currentSession });
+      this.println(`${C.yellow}已请求打断（排队已清空）…${C.reset}`);
+    } else {
+      this.println(`\n${C.dim}再见，主人～${C.reset}`);
+      process.exit(0);
+    }
+  }
+
+  // ── banner ─────────────────────────────────────────────
 
   private printBanner(): void {
     this.println(`${C.magenta}${C.bold}majordomo · 指挥官 TUI${C.reset}`);
     this.println(
-      `${C.dim}Ctrl+J 换行 | Ctrl+L 清屏 | Esc+Esc 清空 | 输入即对话；行尾加 \\ 换行续写（空行取消）；命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
+      `${C.dim}Ctrl+J/Shift+Enter 换行 | Enter 提交 | Ctrl+L 清屏 | Esc+Esc 清空 | Ctrl+C 打断\n` +
+      `命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
     );
   }
 
-  // ── 输入处理 ──────────────────────────────────────────
-  private pendingFirstInput?: string;
-  // ponytail: backslash continuation = multiline input; stdlib readline has no Shift+Enter
-  private buffer: string[] = [];
-  // ponytail: bracketed-paste accumulator — null when not inside a paste block
-  private pasteBuf: string[] | null = null;
-  // ponytail: ConPTY (Windows) strips bracketed paste markers. Two-phase debounce:
-  // phase 1 (first line): 10ms — imperceptible for normal Enter, catches fast paste floods.
-  // phase 2 (second line+): 100ms — ConPTY can deliver lines with unpredictable gaps >10ms.
-  // Single-line inputs pay only the 10ms phase-1 cost. Multi-line pastes get the generous window.
-  private pasteDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private pasteDebounceLines: string[] = [];
-
-  private onLine(raw: string): void {
-    // bracketed paste: terminal wraps pasted content in ESC[200~ ... ESC[201~.
-    // Whole block becomes ONE message instead of one-line-per-submit.
-    if (raw.startsWith(PASTE_START) || this.pasteBuf !== null) {
-      let line = raw;
-      if (raw.startsWith(PASTE_START)) {
-        this.pasteBuf = this.pasteBuf ?? [];
-        line = line.slice(PASTE_START.length);
-      }
-      const ended = line.endsWith(PASTE_END);
-      if (ended) line = line.slice(0, -PASTE_END.length);
-      this.pasteBuf!.push(line);
-      if (ended) {
-        const text = this.pasteBuf!.join("\n");
-        this.pasteBuf = null;
-        this.handlePastedText(text);
-      }
-      return;
-    }
-
-    // ponytail: two-phase ConPTY fallback
-    if (this.pasteDebounceTimer !== null) {
-      // phase 2: already have ≥1 pending line → paste detected, use generous window
-      this.pasteDebounceLines.push(raw);
-      clearTimeout(this.pasteDebounceTimer);
-      this.pasteDebounceTimer = setTimeout(() => this.flushPasteDebounce(), 100);
-      return;
-    }
-    // phase 1: first line, short window — if another line arrives, switches to phase 2
-    this.pasteDebounceLines = [raw];
-    this.pasteDebounceTimer = setTimeout(() => this.flushPasteDebounce(), 10);
-  }
-
-  private flushPasteDebounce(): void {
-    this.pasteDebounceTimer = null;
-    const lines = this.pasteDebounceLines;
-    this.pasteDebounceLines = [];
-    // ponytail: readline holds the last line without trailing \n in rl.line.
-    // Inject \n to flush it through the normal debounce channel, then re-process.
-    if (lines.length > 0 && this.rl.line) {
-      this.pasteDebounceLines = lines;
-      this.pasteDebounceTimer = setTimeout(() => this.flushPasteDebounce(), 10);
-      this.rl.write("\n");
-      return;
-    }
-    if (lines.length === 1) {
-      this.processLine(lines[0]);
-    } else {
-      const text = lines.join("\n");
-      this.handlePastedText(text);
-    }
-  }
-
-  private processLine(raw: string): void {
-    if (this.ctrlJNext) {
-      this.ctrlJNext = false;
-      if (!raw.trim() && !this.pendingPaste) { this.prompt(); return; }
-      if (this.pendingPaste) { this.pendingPaste += "\n" + raw; }
-      else { this.pendingPaste = raw; }
-      this.prompt();
-      return;
-    }
-    const line = raw.trim();
-    if (this.pendingPaste) {
-      if (!line) {
-        // ponytail: empty line deletes entire accumulated paste block
-        this.pendingPaste = undefined;
-        this.println(`${C.yellow}粘贴块已删除${C.reset}`);
-      } else {
-        // ponytail: any typed text + Enter = append and submit
-        const paste = this.pendingPaste;
-        this.pendingPaste = undefined;
-        this.submitText(paste + "\n" + line);
-      }
-      return;
-    }
-    if (this.pendingAsk) {
-      this.handleAskAnswer(line);
-      return;
-    }
-    if (this.pendingPermission) {
-      this.handlePermissionAnswer(line);
-      return;
-    }
-    // multiline continuation: empty line or command aborts a pending buffer
-    if (this.buffer.length) {
-      if (!line || line.startsWith("/")) {
-        this.buffer = [];
-        if (line.startsWith("/")) { this.handleCommand(line); return; }
-        this.println(`${C.dim}（多行输入已取消）${C.reset}`);
-        this.prompt();
-        return;
-      }
-      if (line.endsWith("\\")) {
-        this.buffer.push(line.slice(0, -1));
-        this.rl.setPrompt(`${C.dim}…${C.reset} `);
-        this.rl.prompt();
-        return;
-      }
-      this.submitText([...this.buffer, line].join("\n"));
-      this.buffer = [];
-      return;
-    }
-    if (!line) {
-      this.prompt();
-      return;
-    }
-    if (line.startsWith("/")) {
-      this.handleCommand(line);
-      return;
-    }
-    // start multiline if line ends with backslash
-    if (line.endsWith("\\")) {
-      this.buffer.push(line.slice(0, -1));
-      this.rl.setPrompt(`${C.dim}…${C.reset} `);
-      this.rl.prompt();
-      return;
-    }
-    this.submitText(line);
-  }
-
-  // ponytail: pasted block → accumulate mode. Single-line paste behaves like typed input.
-  private handlePastedText(text: string): void {
-    const t = text.replace(/^\n+/, "").replace(/\n+$/, "");
-    if (!t) { this.prompt(); return; }
-    if (!t.includes("\n")) {
-      // ponytail: if already in accumulation mode, single-line paste appends too
-      if (this.pendingPaste) {
-        this.pendingPaste += "\n" + t;
-        this.prompt();
-        return;
-      }
-      this.onLine(t);
-      return;
-    }
-    // multi-line: start or append to accumulation mode
-    if (this.pendingPaste) {
-      this.pendingPaste += "\n" + t;
-    } else {
-      this.pendingPaste = t;
-    }
-    this.prompt();
-  }
+  // ── submit / commands (logic unchanged from readline version) ──
 
   private submitText(text: string): void {
     if (!this.currentSession) {
       this.send({ type: "create_session", name: text.replace(/\n/g, " ").slice(0, 40).trim() || "新会话" });
       this.pendingFirstInput = text;
     } else if (this.sessionState !== "idle" && this.sessionState !== "error" && this.sessionState !== "closed") {
-      // ponytail: busy → queue, auto-send when idle
       this.pendingInput = text;
       this.println(`${C.dim}（已排队，回合完成后自动发送）${C.reset}`);
     } else {
       this.send({ type: "user_input", sessionId: this.currentSession, text });
-      this.sessionState = "thinking"; // 乐观更新，prompt 立即显示忙碌
+      this.sessionState = "thinking";
     }
-    this.prompt();
+    this.renderBuffer();
   }
 
   private handleCommand(line: string): void {
@@ -350,8 +489,10 @@ export class TuiClient {
       default:
         this.println(`${C.yellow}未知命令: /${cmd}${C.reset}`);
     }
-    this.prompt();
+    this.renderBuffer();
   }
+
+  // ── permission / ask answer handlers ───────────────────
 
   private handleAskAnswer(line: string): void {
     const p = this.pendingAsk!;
@@ -359,22 +500,16 @@ export class TuiClient {
     const parts = line.split(/[\s,]+/).filter(Boolean);
     const indexes = parts.map(Number).filter(n => !isNaN(n) && n >= 1);
     if (indexes.length === 0) {
-      // Cancel / no selection
       this.send({ type: "permission_response", sessionId: p.sessionId, requestId: p.requestId, approve: false });
       this.println(`${C.yellow}已取消${C.reset}`);
-      this.prompt();
       return;
     }
-    // Build answers from selected indexes
     const answers: Record<string, string | string[]> = {};
     for (const q of p.questions) {
       const selected = indexes
         .filter(i => i <= q.options.length)
         .map(i => q.options[i - 1].label);
-      // ponytail: per-question indexes for multi-question support would need a smarter UI
-      if (selected.length === 0) {
-        selected.push(q.options[0].label); // default to first option
-      }
+      if (selected.length === 0) selected.push(q.options[0].label);
       answers[q.header] = q.multiSelect ? selected : selected[0];
     }
     this.send({
@@ -385,7 +520,6 @@ export class TuiClient {
       updatedInput: { answers },
     });
     this.println(`${C.green}已选择${C.reset}`);
-    this.prompt();
   }
 
   private handlePermissionAnswer(line: string): void {
@@ -399,7 +533,6 @@ export class TuiClient {
       approve,
     });
     this.println(approve ? `${C.green}已批准${C.reset}` : `${C.yellow}已拒绝${C.reset}`);
-    this.prompt();
   }
 
   private renderAskUserQuestion(requestId: string, sessionId: string, rawInput: string): void {
@@ -419,15 +552,21 @@ export class TuiClient {
         }
       }
       this.println(`${C.yellow}输入编号选择 (如 1,3 或 1 2 3，回车取消):${C.reset}`);
+      // ponytail: enter ask mode — single-line input for answer
+      this.promptMode = "ask";
+      this.specialBuf = "";
+      this.renderBuffer();
     } catch {
-      // fallback: regular permission prompt
       this.pendingPermission = { requestId, sessionId };
       this.println(`${C.yellow}⚠ 工作层请求权限 [AskUserQuestion]${C.reset}`);
-      this.println(`${C.yellow}批准吗? (y/n)${C.reset}`);
+      this.promptMode = "permission";
+      this.specialBuf = "";
+      this.renderBuffer();
     }
   }
 
-  // ── 消息渲染 ──────────────────────────────────────────
+  // ── message rendering ──────────────────────────────────
+
   private onMessage(raw: string): void {
     const msg = parseServerMessage(raw);
     if (!msg) return;
@@ -446,7 +585,6 @@ export class TuiClient {
           this.send({ type: "user_input", sessionId: msg.session.id, text: this.pendingFirstInput });
           this.pendingFirstInput = undefined;
         }
-        this.prompt();
         break;
       case "session_closed":
         if (this.currentSession === msg.sessionId) {
@@ -466,11 +604,9 @@ export class TuiClient {
         const isInline = msg.text.startsWith("\r");
         const body = renderMarkdown(isInline ? msg.text.slice(1) : msg.text);
         if (isInline) {
-          // ponytail: \r-prefixed messages overwrite same line (thinking_tokens counter)
-          process.stdout.write("\x1b[0G\x1b[0K");
-          process.stdout.write(`${C.dim}工作层:${C.reset} ${body}`);
-          this.inlineMode = true;
-          if (this.rl) this.rl.prompt(true);
+          this.clearRender();
+          process.stdout.write(`\x1b[0G\x1b[0K${C.dim}工作层:${C.reset} ${body}\n`);
+          this.renderBuffer();
         } else {
           this.println(`${C.dim}工作层:${C.reset} ${body}`);
         }
@@ -485,7 +621,9 @@ export class TuiClient {
         } else {
           this.pendingPermission = { requestId: msg.requestId, sessionId: msg.sessionId };
           this.println(`${C.yellow}⚠ 工作层请求权限 [${msg.tool}]: ${msg.detail}${C.reset}`);
-          this.println(`${C.yellow}批准吗? (y/n)${C.reset}`);
+          this.promptMode = "permission";
+          this.specialBuf = "";
+          this.renderBuffer();
         }
         break;
       case "session_state":
@@ -494,15 +632,14 @@ export class TuiClient {
         }
         if (msg.state === "thinking") this.println(`${C.dim}…工作层思考中${C.reset}`);
         if (msg.state === "idle" || msg.state === "error" || msg.state === "closed") {
-          // ponytail: auto-send queued input after session goes idle
           if (this.pendingInput && msg.sessionId === this.currentSession) {
             const text = this.pendingInput;
             this.pendingInput = undefined;
             this.println(`${C.dim}> ${text}${C.reset}`);
             this.submitText(text);
-            break; // submitText already calls prompt()
+            break;
           }
-          this.prompt();
+          this.renderBuffer();
         }
         break;
       case "profile_switched":
@@ -519,7 +656,6 @@ export class TuiClient {
       this.println(`${C.dim}（暂无会话，输入内容或 /new 创建）${C.reset}`);
       return;
     }
-    // ponytail: show recent 10, rest still resumable by id
     const shown = sessions.slice(0, 10);
     const hidden = sessions.length - shown.length;
     this.println(`${C.cyan}— 会话列表${hidden > 0 ? `（最近 ${shown.length}，${hidden} 条旧会话已隐藏）` : ""} —${C.reset}`);
