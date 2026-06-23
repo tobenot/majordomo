@@ -31,6 +31,8 @@ export class TuiClient {
   private personaName = "指挥官";
   private pendingPermission?: { requestId: string; sessionId: string };
   private pendingAsk?: { requestId: string; sessionId: string; questions: AskQuestion[] };
+  // ponytail: paste confirmation — multi-line paste isn't auto-submitted, user can review/discard
+  private pendingPaste?: string;
 
   constructor(private url: string) {}
 
@@ -70,6 +72,7 @@ export class TuiClient {
         this.pasteBuf = null;
         if (this.pasteDebounceTimer) { clearTimeout(this.pasteDebounceTimer); this.pasteDebounceTimer = null; }
         this.pasteDebounceLines = [];
+        this.pendingPaste = undefined;
         this.send({ type: "interrupt", sessionId: this.currentSession });
         this.println(`\n${C.yellow}已请求打断（排队已清空）…${C.reset}`);
       } else {
@@ -81,6 +84,12 @@ export class TuiClient {
 
   // ponytail: prompt reflects session state — user always knows if worker is busy
   private prompt(): void {
+    if (this.pendingPaste) {
+      const lines = this.pendingPaste.split("\n").length;
+      this.rl.setPrompt(`${C.yellow}[累积 ${lines} 行，继续粘贴/打字发送，空行删除]${C.reset} > `);
+      this.rl.prompt();
+      return;
+    }
     const tag = this.currentSession ? this.currentSession : "无会话";
     const busy = this.sessionState !== "idle" && this.sessionState !== "closed";
     const indicator = this.sessionState === "thinking" ? `${C.dim}…${C.reset}` :
@@ -169,6 +178,19 @@ export class TuiClient {
 
   private processLine(raw: string): void {
     const line = raw.trim();
+    if (this.pendingPaste) {
+      if (!line) {
+        // ponytail: empty line deletes entire accumulated paste block
+        this.pendingPaste = undefined;
+        this.println(`${C.yellow}粘贴块已删除${C.reset}`);
+      } else {
+        // ponytail: any typed text + Enter = append and submit
+        const paste = this.pendingPaste;
+        this.pendingPaste = undefined;
+        this.submitText(paste + "\n" + line);
+      }
+      return;
+    }
     if (this.pendingAsk) {
       this.handleAskAnswer(line);
       return;
@@ -214,15 +236,29 @@ export class TuiClient {
     this.submitText(line);
   }
 
-  // ponytail: pasted block → single message. Single-line paste behaves like typed input.
+  // ponytail: pasted block → accumulate mode. Single-line paste behaves like typed input.
   private handlePastedText(text: string): void {
     const t = text.replace(/^\n+/, "").replace(/\n+$/, "");
     if (!t) { this.prompt(); return; }
     if (!t.includes("\n")) {
-      this.onLine(t); // route single-line paste through normal logic (commands, backslash)
+      // ponytail: if already in accumulation mode, single-line paste appends too
+      if (this.pendingPaste) {
+        this.pendingPaste += "\n" + t;
+        this.println(`${C.yellow}${t}${C.reset}`);
+        this.prompt();
+        return;
+      }
+      this.onLine(t);
       return;
     }
-    this.submitText(t);
+    // multi-line: start or append to accumulation mode
+    if (this.pendingPaste) {
+      this.pendingPaste += "\n" + t;
+    } else {
+      this.pendingPaste = t;
+    }
+    this.println(`${C.yellow}${t}${C.reset}`);
+    this.prompt();
   }
 
   private submitText(text: string): void {
@@ -245,6 +281,7 @@ export class TuiClient {
     const arg = rest.join(" ");
     switch (cmd) {
       case "new":
+      case "clear":
         this.send({ type: "create_session", name: arg || undefined });
         break;
       case "sessions":
