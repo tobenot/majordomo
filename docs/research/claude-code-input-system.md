@@ -86,44 +86,51 @@ majordomo 用 Node `readline`，模型差异：
 
 ## 4. Roadmap 规划
 
-### Phase 1：对标增强（不改架构，< 30 行）
+### Phase 1：对标增强（不改架构，< 30 行）✅ 已完成 (2026-06-23)
 
 在现有 readline 基础上加 Claude Code 的核心快捷键。
 
-- [ ] `Ctrl+J` → 换行（等效 `\` + Enter，但更符合肌肉记忆）
-- [ ] `Ctrl+L` → 清屏
-- [ ] `Esc+Esc` → 清空当前输入/粘贴块（替换现在的空行删除）
-- [ ] 上下箭头 → 历史浏览（readline 原生支持，需要启用）
-- [ ] 更新 banner 帮助文本
+- [x] `Ctrl+J` → 换行（等效 `\` + Enter，但更符合肌肉记忆）
+- [x] `Ctrl+L` → 清屏
+- [x] `Esc+Esc` → 清空当前输入/粘贴块（替换现在的空行删除）
+- [x] 上下箭头 → 历史浏览（readline 原生支持，需要启用）
+- [x] 更新 banner 帮助文本
 
-**不改架构，风险零。预估 30 分钟。**
+commit: `788998e`
 
-### Phase 2：Raw Mode 多行编辑（~150 行，核心变更）
+### Phase 2：Raw Mode 多行编辑（~150 行 → 实际 360/+224/-）✅ 已完成 (2026-06-23)
 
 弃用 readline，用 `process.stdin` raw mode + `keypress` 事件自己管 buffer。
 
 核心变更：
-- [ ] 多行文本 buffer（`string[]`），Enter 插入 `\n`
-- [ ] Shift+Enter → 提交（对标 Claude Code）
-- [ ] Ctrl+J → 换行（保留）
-- [ ] 左右箭头、Home/End → 行内光标移动
-- [ ] Backspace/Delete → 删除字符（含跨行）
-- [ ] 粘贴检测（复用两阶段防抖），内容插入 buffer，不回显
-- [ ] Up/Down → 历史导航
-- [ ] 保留：命令系统 `/new` `/sessions` 等
-- [ ] 保留：权限回答 `y/n`、AskUserQuestion 编号选择
+- [x] 多行文本 buffer（`string` + character offset），Enter 提交（非插入 `\n`——用户选择保留单行快路径）
+- [x] Shift+Enter / Ctrl+J → 插入换行
+- [x] 左右箭头、Home/End → 行内光标移动；Ctrl+A/E/B/F
+- [x] Backspace/Delete → 删除字符（含跨行）
+- [x] Ctrl+K/U/W → 删至行尾/行首/删前词
+- [x] Up/Down → 历史导航
+- [x] 粘贴检测（Bracketed Paste 标记 + ConPTY 字符逐字降级），内容插入 buffer 可编辑
+- [x] 保留：命令系统 `/new` `/sessions` 等
+- [x] 保留：权限回答 `y/n`、AskUserQuestion 编号选择（单行阻塞模式）
 
-**风险：中等。readline 的历史、自动折行、信号处理需要自己写。预估 3-4 小时。**
+commit: `df01c2a`
 
-### Phase 3：高级特性（按需）
+实际实现与原始计划的差异：
+- **Enter 行为**：调研建议 "Enter 插入换行"，但 majordomo 90% 输入是单行 → 用户决策 Enter 提交，Ctrl+J/Shift+Enter 换行
+- **buffer 模型**：调研建议 `string[]`，实际用 Claude Code 的 `string + char offset`（更简洁）
+- **粘贴**：扔掉两阶段防抖，用 Bracketed Paste 标记 + 字符逐字降级，raw mode 下 paste 内容留在 buffer 可编辑
+- **杀戒环**：Ctrl+K/U/W 已实现（不含 Ctrl+Y yank）
 
-Phase 1+2 上线后，根据实际使用反馈再决定。
+### Phase 3：待做（按需）
 
+实际使用后按需决定。
+
+- [ ] `Ctrl+Y` → yank（杀戒环回补）—— Ctrl+K/U/W 已实现，差 yank，~10 行
+- [ ] `Ctrl+G` → 外部编辑器 ($EDITOR) —— ~30 行
 - [ ] `@` 文件路径补全
-- [ ] 外部编辑器 `Ctrl+G`
 - [ ] Vim 模式
 - [ ] 图片粘贴
-- [ ] 杀戒环 (Ctrl+K/U/W/Y)
+- [ ] 宽字符显示修正（中文/emoji 折行偏移）
 
 ---
 
