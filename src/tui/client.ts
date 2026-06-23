@@ -1,4 +1,8 @@
 import * as readline from "readline";
+import { spawnSync } from "child_process";
+import { writeFileSync, readFileSync, unlinkSync } from "fs";
+import { tmpdir, platform } from "os";
+import { join } from "path";
 import { WebSocket } from "ws";
 import { parseServerMessage, ClientMessage, SessionInfo, SessionState } from "../protocol/messages";
 import { renderMarkdown } from "./markdown";
@@ -49,6 +53,9 @@ export class TuiClient {
 
   // ponytail: paste accumulation in raw mode — bracketed markers or char-by-char
   private pasting = false;
+
+  // ponytail: single-entry kill ring — Ctrl+K/U/W save, Ctrl+Y yanks
+  private killBuf = "";
 
   // misc
   private pendingFirstInput?: string;
@@ -165,6 +172,13 @@ export class TuiClient {
       } else if (key.ctrl && key.name === "w") {
         this.deleteWordBackward();
         this.renderBuffer();
+      } else if (key.ctrl && key.name === "y") {
+        if (this.killBuf) {
+          this.insertAtCursor(this.killBuf);
+          this.renderBuffer();
+        }
+      } else if (key.ctrl && key.name === "g") {
+        this.externalEditor();
       } else if (key.ctrl && key.name === "l") {
         process.stdout.write("\x1b[2J\x1b[H");
         this.renderedLines = 0;
@@ -217,6 +231,7 @@ export class TuiClient {
     const next = this.buf.indexOf("\n", this.cursor);
     const end = next >= 0 ? next : this.buf.length;
     if (end > this.cursor) {
+      this.killBuf = this.buf.slice(this.cursor, end);
       this.buf = this.buf.slice(0, this.cursor) + this.buf.slice(end);
       this.historyIdx = -1;
     }
@@ -226,6 +241,7 @@ export class TuiClient {
     const prev = this.buf.lastIndexOf("\n", this.cursor - 1);
     const start = prev >= 0 ? prev + 1 : 0;
     if (this.cursor > start) {
+      this.killBuf = this.buf.slice(start, this.cursor);
       this.buf = this.buf.slice(0, start) + this.buf.slice(this.cursor);
       this.cursor = start;
       this.historyIdx = -1;
@@ -236,6 +252,7 @@ export class TuiClient {
     const before = this.buf.slice(0, this.cursor);
     const m = before.match(/(\S+|\s+)$/);
     if (m) {
+      this.killBuf = m[0];
       this.buf = before.slice(0, before.length - m[0].length) + this.buf.slice(this.cursor);
       this.cursor -= m[0].length;
       this.historyIdx = -1;
@@ -268,6 +285,23 @@ export class TuiClient {
   }
 
   // ── submit ─────────────────────────────────────────────
+
+  private externalEditor(): void {
+    process.stdin.setRawMode(false);
+    const editor = process.env.EDITOR || process.env.VISUAL || (platform() === "win32" ? "notepad" : "vi");
+    const tmp = join(tmpdir(), `mj-${Date.now()}.txt`);
+    writeFileSync(tmp, this.buf, "utf-8");
+    try {
+      spawnSync(editor, [tmp], { stdio: "inherit" });
+      this.buf = readFileSync(tmp, "utf-8").replace(/\r\n/g, "\n");
+      this.cursor = Math.min(this.cursor, this.buf.length);
+      process.stdin.setRawMode(true);
+      readline.emitKeypressEvents(process.stdin);
+      this.println(`${C.dim}编辑器已退出，buffer 已更新${C.reset}`);
+    } finally {
+      try { unlinkSync(tmp); } catch { /* */ }
+    }
+  }
 
   private submit(): void {
     const text = this.buf.trim();
@@ -432,7 +466,7 @@ export class TuiClient {
   private printBanner(): void {
     this.println(`${C.magenta}${C.bold}majordomo · 指挥官 TUI${C.reset}`);
     this.println(
-      `${C.dim}Ctrl+J/Shift+Enter 换行 | Enter 提交 | Ctrl+L 清屏 | Esc+Esc 清空 | Ctrl+C 打断\n` +
+      `${C.dim}Ctrl+J/Shift+Enter 换行 | Enter 提交 | Ctrl+L 清屏 | Esc+Esc 清空 | Ctrl+Y 粘贴删除 | Ctrl+G 编辑器 | Ctrl+C 打断\n` +
       `命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
     );
   }

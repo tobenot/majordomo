@@ -125,8 +125,8 @@ commit: `df01c2a`
 
 实际使用后按需决定。
 
-- [ ] `Ctrl+Y` → yank（杀戒环回补）—— Ctrl+K/U/W 已实现，差 yank，~10 行
-- [ ] `Ctrl+G` → 外部编辑器 ($EDITOR) —— ~30 行
+- [x] `Ctrl+Y` → yank（杀戒环回补）—— Ctrl+K/U/W 已实现，差 yank，~10 行
+- [x] `Ctrl+G` → 外部编辑器 ($EDITOR) —— ~30 行，Windows 默认 notepad
 - [ ] `@` 文件路径补全
 - [ ] Vim 模式
 - [ ] 图片粘贴
