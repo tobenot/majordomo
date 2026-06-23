@@ -68,6 +68,8 @@ export class TuiClient {
         this.pendingInput = undefined;
         this.buffer = [];
         this.pasteBuf = null;
+        if (this.pasteDebounceTimer) { clearTimeout(this.pasteDebounceTimer); this.pasteDebounceTimer = null; }
+        this.pasteDebounceLines = [];
         this.send({ type: "interrupt", sessionId: this.currentSession });
         this.println(`\n${C.yellow}已请求打断（排队已清空）…${C.reset}`);
       } else {
@@ -113,6 +115,12 @@ export class TuiClient {
   private buffer: string[] = [];
   // ponytail: bracketed-paste accumulator — null when not inside a paste block
   private pasteBuf: string[] | null = null;
+  // ponytail: ConPTY (Windows) strips bracketed paste markers. Two-phase debounce:
+  // phase 1 (first line): 10ms — imperceptible for normal Enter, catches fast paste floods.
+  // phase 2 (second line+): 100ms — ConPTY can deliver lines with unpredictable gaps >10ms.
+  // Single-line inputs pay only the 10ms phase-1 cost. Multi-line pastes get the generous window.
+  private pasteDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pasteDebounceLines: string[] = [];
 
   private onLine(raw: string): void {
     // bracketed paste: terminal wraps pasted content in ESC[200~ ... ESC[201~.
@@ -134,6 +142,32 @@ export class TuiClient {
       return;
     }
 
+    // ponytail: two-phase ConPTY fallback
+    if (this.pasteDebounceTimer !== null) {
+      // phase 2: already have ≥1 pending line → paste detected, use generous window
+      this.pasteDebounceLines.push(raw);
+      clearTimeout(this.pasteDebounceTimer);
+      this.pasteDebounceTimer = setTimeout(() => this.flushPasteDebounce(), 100);
+      return;
+    }
+    // phase 1: first line, short window — if another line arrives, switches to phase 2
+    this.pasteDebounceLines = [raw];
+    this.pasteDebounceTimer = setTimeout(() => this.flushPasteDebounce(), 10);
+  }
+
+  private flushPasteDebounce(): void {
+    this.pasteDebounceTimer = null;
+    const lines = this.pasteDebounceLines;
+    this.pasteDebounceLines = [];
+    if (lines.length === 1) {
+      this.processLine(lines[0]);
+    } else {
+      const text = lines.join("\n");
+      this.handlePastedText(text);
+    }
+  }
+
+  private processLine(raw: string): void {
     const line = raw.trim();
     if (this.pendingAsk) {
       this.handleAskAnswer(line);
@@ -193,7 +227,7 @@ export class TuiClient {
 
   private submitText(text: string): void {
     if (!this.currentSession) {
-      this.send({ type: "create_session", name: text.slice(0, 20) });
+      this.send({ type: "create_session", name: text.replace(/\n/g, " ").slice(0, 40).trim() || "新会话" });
       this.pendingFirstInput = text;
     } else if (this.sessionState !== "idle" && this.sessionState !== "error" && this.sessionState !== "closed") {
       // ponytail: busy → queue, auto-send when idle
