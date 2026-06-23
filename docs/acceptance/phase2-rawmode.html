@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 2 验收指南 — Raw Mode 多行编辑</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; background: #1e1e2e; color: #cdd6f4; max-width: 780px; margin: 0 auto; padding: 32px 20px 80px; line-height: 1.6; }
+  h1 { font-size: 1.6em; margin-bottom: 6px; color: #f5c2e7; }
+  .meta { color: #6c7086; font-size: 0.85em; margin-bottom: 28px; }
+  h2 { font-size: 1.15em; margin: 32px 0 10px; color: #89b4fa; border-bottom: 1px solid #313244; padding-bottom: 5px; }
+  .card { background: #181825; border: 1px solid #313244; border-radius: 8px; padding: 16px 18px; margin-bottom: 10px; }
+  .card code { background: #313244; padding: 1px 6px; border-radius: 3px; font-size: 0.95em; }
+  .step { display: inline-block; background: #45475a; color: #cdd6f4; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-size: 0.8em; margin-right: 6px; }
+  .pass { color: #a6e3a1; }
+  .fail { color: #f38ba8; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #313244; font-size: 0.9em; }
+  th { color: #89b4fa; font-weight: 600; }
+  td:first-child { white-space: nowrap; font-family: "Cascadia Code", "Fira Code", monospace; font-size: 0.85em; }
+  .note { color: #a6adc8; font-size: 0.85em; margin-top: 6px; }
+  .warn { background: #2a1f1f; border-left: 3px solid #f38ba8; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; font-size: 0.9em; }
+  .tip { background: #1f2a1f; border-left: 3px solid #a6e3a1; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<h1>📋 Phase 2 验收指南</h1>
+<div class="meta">
+  功能：Raw Mode 多行编辑 &nbsp;|&nbsp; 日期：2026-06-23 &nbsp;|&nbsp; 状态：待手动验证<br>
+  唯一变更文件：<code>src/tui/client.ts</code> (~560 行)
+</div>
+
+<div class="tip">
+  <strong>怎么验收</strong>：在真实终端里打开 majordomo（<code>npm start</code>），照下表逐项操作。预期行为匹配就勾 ✅，不匹配记 ❌。
+  <strong>不要只用 mock 模式</strong>——mock worker 不产生权限请求和 AskUserQuestion。
+</div>
+
+<h2>1. 基础输入</h2>
+
+<div class="card">
+  <strong><span class="step">1</span> 单行提交</strong>
+  <p>直接打字，按 <code>Enter</code>。文字发送，"指挥官，..." 正常返回。</p>
+  <p class="note">☐ 通过 / ☐ 失败</p>
+</div>
+
+<div class="card">
+  <strong><span class="step">2</span> 多行 — Ctrl+J</strong>
+  <p>打第一行 → <code>Ctrl+J</code> → 打第二行 → <code>Enter</code> 提交。两行合并发送。</p>
+  <p class="note">☐ 通过 / ☐ 失败</p>
+</div>
+
+<div class="card">
+  <strong><span class="step">3</span> 多行 — Shift+Enter</strong>
+  <p>同上，用 <code>Shift+Enter</code> 换行。行为应与 Ctrl+J 一致。</p>
+  <p class="note">☐ 通过 / ☐ 失败</p>
+</div>
+
+<h2>2. 光标移动</h2>
+
+<table>
+  <tr><th>按键</th><th>功能</th><th>操作</th><th style="width:100px">结果</th></tr>
+  <tr><td><code>←</code> / <code>Ctrl+B</code></td><td>左移一位</td><td>多行文本中左右移动</td><td>☐</td></tr>
+  <tr><td><code>→</code> / <code>Ctrl+F</code></td><td>右移一位</td><td>同上</td><td>☐</td></tr>
+  <tr><td><code>Home</code> / <code>Ctrl+A</code></td><td>跳到行首</td><td>光标在行中 → Home</td><td>☐</td></tr>
+  <tr><td><code>End</code> / <code>Ctrl+E</code></td><td>跳到行尾</td><td>光标在行中 → End</td><td>☐</td></tr>
+  <tr><td><code>↑</code></td><td>历史后退</td><td>输入一条提交后，按↑出现上一条</td><td>☐</td></tr>
+  <tr><td><code>↓</code></td><td>历史前进</td><td>↑ 后按 ↓ 回到空白</td><td>☐</td></tr>
+</table>
+
+<h2>3. 编辑操作</h2>
+
+<table>
+  <tr><th>按键</th><th>功能</th><th>操作</th><th style="width:100px">结果</th></tr>
+  <tr><td><code>Backspace</code></td><td>删光标前一个字符</td><td>光标在中部 → Backspace</td><td>☐</td></tr>
+  <tr><td><code>Delete</code></td><td>删光标后一个字符</td><td>光标在中部 → Delete</td><td>☐</td></tr>
+  <tr><td><code>Ctrl+K</code></td><td>删至行尾</td><td>光标在行中 → Ctrl+K，行尾内容消失</td><td>☐</td></tr>
+  <tr><td><code>Ctrl+U</code></td><td>删至行首</td><td>光标在行中 → Ctrl+U，行首内容消失</td><td>☐</td></tr>
+  <tr><td><code>Ctrl+W</code></td><td>删前一个词</td><td>"hello world" 光标在 w 后 → Ctrl+W，"world" 消失</td><td>☐</td></tr>
+  <tr><td><code>Ctrl+Y</code></td><td>粘贴杀戒环</td><td>Ctrl+K 删掉一段 → Ctrl+Y，内容贴回</td><td>☐</td></tr>
+  <tr><td><code>Ctrl+G</code></td><td>外部编辑器</td><td>按 Ctrl+G，自动打开 notepad/$EDITOR</td><td>☐</td></tr>
+</table>
+
+<div class="note">注：Ctrl+K/U/W 之间不累积（每次覆盖 kill buffer）。Ctrl+Y 贴回最后一次删的内容。</div>
+
+<h2>4. 粘贴</h2>
+
+<div class="card">
+  <strong><span class="step">4</span> 粘贴多行文本</strong>
+  <p>从外部复制一段<strong>多行</strong>文字 → 在 majordomo 中右键粘贴（或 Ctrl+V）。<br>
+  预期：内容出现在 buffer 里，<strong>不会自动发送</strong>。可编辑、可移动光标，确认后按 Enter 提交。</p>
+  <p class="note">☐ 通过 / ☐ 失败</p>
+</div>
+
+<div class="card">
+  <strong><span class="step">5</span> 粘贴单行</strong>
+  <p>复制一小段文字粘贴。内容留在 buffer，可编辑后 Enter 发送。</p>
+  <p class="note">☐ 通过 / ☐ 失败</p>
+</div>
+
+<h2>5. 全局操作</h2>
+
+<table>
+  <tr><th>按键</th><th>功能</th><th>操作</th><th style="width:100px">结果</th></tr>
+  <tr><td><code>Ctrl+L</code></td><td>清屏</td><td>屏幕上已有输出 → Ctrl+L。屏幕清空，buffer 保留。</td><td>☐</td></tr>
+  <tr><td><code>Esc+Esc</code></td><td>清空 buffer</td><td>正在编辑→快速双击 Esc。buffer 清空。</td><td>☐</td></tr>
+  <tr><td><code>Ctrl+C</code> (空闲)</td><td>退出</td><td>无 session 或 idle 状态 → Ctrl+C。程序退出。</td><td>☐</td></tr>
+  <tr><td><code>Ctrl+C</code> (忙碌)</td><td>打断</td><td>session 正在跑 → Ctrl+C。输出 "已请求打断"。</td><td>☐</td></tr>
+</table>
+
+<h2>6. 权限交互（需要 SDK 模式触发）</h2>
+
+<div class="warn">
+  ⚠️ 需要连接真实 SDK worker（Claude Agent SDK）。Mock worker 不会触发权限请求。
+</div>
+
+<div class="card">
+  <strong><span class="step">6</span> y/n 权限回答</strong>
+  <p>触发一个 tool 权限请求 → 终端提示 "批准吗? (y/n)"。<br>
+  输入 <code>y</code> + Enter 批准，<code>n</code> + Enter 拒绝。<br>
+  <strong>此时应看不到多行 buffer 渲染</strong>——y/n 是单行阻塞模式。</p>
+  <p class="note">☐ 通过 / ☐ 失败</p>
+</div>
+
+<div class="card">
+  <strong><span class="step">7</span> AskUserQuestion 多选</strong>
+  <p>触发 AskUserQuestion（skill 调用或 permission choose）→ 终端列出选项。<br>
+  输入 <code>0</code> / <code>1</code> / ... → Enter 选择，直接 Enter 取消。<br>
+  同样应看到单行阻塞输入，不干扰主 buffer。</p>
+  <p class="note">☐ 通过 / ☐ 失败</p>
+</div>
+
+<h2>7. 命令系统</h2>
+
+<table>
+  <tr><th>命令</th><th>预期</th><th style="width:100px">结果</th></tr>
+  <tr><td><code>/new</code></td><td>创建新 session，清除历史</td><td>☐</td></tr>
+  <tr><td><code>/sessions</code></td><td>列出所有 session</td><td>☐</td></tr>
+  <tr><td><code>/resume &lt;id&gt;</code></td><td>恢复指定 session</td><td>☐</td></tr>
+  <tr><td><code>/model</code></td><td>切换模型</td><td>☐</td></tr>
+  <tr><td><code>/profile &lt;name&gt;</code></td><td>切换 profile</td><td>☐</td></tr>
+  <tr><td><code>/compact</code></td><td>触发 compaction</td><td>☐</td></tr>
+</table>
+
+<h2>8. 已知限制（无需验证，知道了就行）</h2>
+
+<div class="warn">
+  <strong>以下情况属已知问题，验收时无需纠结：</strong>
+  <ul style="margin-top:6px;padding-left:18px;">
+    <li>长行折行：无词边界检测，中英文混排可能显示偏移</li>
+    <li>中文/emoji：宽字符（全角、🇨🇳）未做特殊处理，光标可能偏位</li>
+    <li>Windows ConPTY 粘贴：Bracketed Paste 标记被剥离时，内容逐字插入（看起来像快速打字，不影响功能）</li>
+  </ul>
+</div>
+
+<div class="tip" style="margin-top:20px;">
+  <strong>验收结论</strong>：全部 7 类 + 命令系统通过 → Phase 2 验收完成。失败项记下来，回传给 Claude 修。
+</div>
+
+</body>
+</html>
