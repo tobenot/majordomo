@@ -168,6 +168,14 @@ export class TuiClient {
     this.pasteDebounceTimer = null;
     const lines = this.pasteDebounceLines;
     this.pasteDebounceLines = [];
+    // ponytail: readline holds the last line without trailing \n in rl.line.
+    // Inject \n to flush it through the normal debounce channel, then re-process.
+    if (lines.length > 0 && this.rl.line) {
+      this.pasteDebounceLines = lines;
+      this.pasteDebounceTimer = setTimeout(() => this.flushPasteDebounce(), 10);
+      this.rl.write("\n");
+      return;
+    }
     if (lines.length === 1) {
       this.processLine(lines[0]);
     } else {
@@ -244,7 +252,6 @@ export class TuiClient {
       // ponytail: if already in accumulation mode, single-line paste appends too
       if (this.pendingPaste) {
         this.pendingPaste += "\n" + t;
-        this.println(`${C.yellow}${t}${C.reset}`);
         this.prompt();
         return;
       }
@@ -257,7 +264,6 @@ export class TuiClient {
     } else {
       this.pendingPaste = t;
     }
-    this.println(`${C.yellow}${t}${C.reset}`);
     this.prompt();
   }
 
