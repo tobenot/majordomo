@@ -33,6 +33,8 @@ export class TuiClient {
   private pendingAsk?: { requestId: string; sessionId: string; questions: AskQuestion[] };
   // ponytail: paste confirmation — multi-line paste isn't auto-submitted, user can review/discard
   private pendingPaste?: string;
+  private ctrlJNext = false;
+  private lastEscTime = 0;
 
   constructor(private url: string) {}
 
@@ -58,7 +60,9 @@ export class TuiClient {
   }
 
   private setupReadline(): void {
-    this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    readline.emitKeypressEvents(process.stdin);
+    const history: string[] = [];
+    this.rl = readline.createInterface({ input: process.stdin, output: process.stdout, history });
     process.stdout.write("\x1b[?2004h"); // ponytail: enable bracketed paste mode
     process.on("exit", () => process.stdout.write("\x1b[?2004l"));
     this.printBanner();
@@ -78,6 +82,26 @@ export class TuiClient {
       } else {
         this.println(`\n${C.dim}再见，主人～${C.reset}`);
         process.exit(0);
+      }
+    });
+    process.stdin.on("keypress", (_str, key) => {
+      if (key.ctrl && key.name === "j") {
+        this.ctrlJNext = true;
+        this.rl.write("\n");
+        return;
+      }
+      if (key.ctrl && key.name === "l") {
+        process.stdout.write("\x1b[2J\x1b[H");
+        this.rl.prompt(true);
+        return;
+      }
+      if (key.name === "escape") {
+        const now = Date.now();
+        if (this.pendingPaste && now - this.lastEscTime < 500) {
+          this.pendingPaste = undefined;
+          this.println(`${C.yellow}粘贴块已删除${C.reset}`);
+        }
+        this.lastEscTime = now;
       }
     });
   }
@@ -114,7 +138,7 @@ export class TuiClient {
   private printBanner(): void {
     this.println(`${C.magenta}${C.bold}majordomo · 指挥官 TUI${C.reset}`);
     this.println(
-      `${C.dim}输入即对话；行尾加 \\ 可换行续写（空行取消）；命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
+      `${C.dim}Ctrl+J 换行 | Ctrl+L 清屏 | Esc+Esc 清空 | 输入即对话；行尾加 \\ 换行续写（空行取消）；命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
     );
   }
 
@@ -185,6 +209,14 @@ export class TuiClient {
   }
 
   private processLine(raw: string): void {
+    if (this.ctrlJNext) {
+      this.ctrlJNext = false;
+      if (!raw.trim() && !this.pendingPaste) { this.prompt(); return; }
+      if (this.pendingPaste) { this.pendingPaste += "\n" + raw; }
+      else { this.pendingPaste = raw; }
+      this.prompt();
+      return;
+    }
     const line = raw.trim();
     if (this.pendingPaste) {
       if (!line) {
