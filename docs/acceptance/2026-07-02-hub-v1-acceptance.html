@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>验收指南：中枢 Hub v1 · majordomo</title>
+    <style>
+      :root {
+        --bg: #0e1016; --card: #161a26; --border: #2a3042;
+        --text: #e8ebf2; --text2: #9aa3b6; --accent: #4d8dff; --accent2: #b46bff;
+        --green: #35c46a; --yellow: #e6b450; --code: #1b2030;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.7; padding: 0 0 80px;
+      }
+      header {
+        padding: 36px 24px 24px; text-align: center;
+        background: linear-gradient(160deg, #1a1f33, #11141f);
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 { margin: 0 0 6px; font-size: 26px; }
+      header h1 .accent { color: var(--accent2); }
+      header p { margin: 0; color: var(--text2); }
+      .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+      .card {
+        background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+        padding: 22px 24px; margin: 22px 0;
+      }
+      h2 { font-size: 19px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+      h2 .num {
+        background: var(--accent); color: #fff; width: 28px; height: 28px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 15px; flex: 0 0 auto;
+      }
+      h3 { font-size: 15px; color: var(--accent); margin: 18px 0 8px; }
+      pre {
+        background: var(--code); border: 1px solid var(--border); border-radius: 10px;
+        padding: 14px 16px; overflow-x: auto; margin: 10px 0; font-size: 13px;
+      }
+      code { font-family: "Cascadia Code", Consolas, monospace; }
+      p code, li code { background: var(--code); padding: 1px 6px; border-radius: 5px; color: var(--accent2); }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+      th, td { border: 1px solid var(--border); padding: 8px 11px; text-align: left; vertical-align: top; }
+      th { background: #1a1f30; color: var(--text2); }
+      .ok { color: var(--green); } .warn { color: var(--yellow); }
+      .pill { display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 12px; border: 1px solid var(--border); }
+      .pill.g { color: var(--green); border-color: var(--green); }
+      .pill.y { color: var(--yellow); border-color: var(--yellow); }
+      .pill.b { color: var(--accent); border-color: var(--accent); }
+      blockquote {
+        margin: 12px 0; padding: 10px 16px; border-left: 3px solid var(--accent2);
+        background: #1a1526; color: var(--text2); border-radius: 0 8px 8px 0;
+      }
+      .check { list-style: none; padding-left: 0; }
+      .check li { padding: 6px 0 6px 30px; position: relative; }
+      .check li::before { content: "☐"; position: absolute; left: 0; color: var(--accent); font-size: 18px; }
+      hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>验收指南：中枢 <span class="accent">Hub v1</span></h1>
+      <p>确认 Bifrost 上报 → 中枢三张表 → 面板/复命 整条链路跑通 · 预计 10~15 分钟</p>
+    </header>
+
+    <div class="wrap">
+      <div class="card">
+        <h2><span class="num">0</span>先搞懂这次验什么</h2>
+        <p>上一次（<code>bifrost-report-acceptance</code>）只验了 <b>Bifrost 一侧</b>——中枢没建，所以「上报」= 落进离线缓存。<b>这次中枢建好了</b>，要验的是完整闭环：</p>
+        <blockquote>窗口干活 → Bifrost <code>report.ps1</code> → POST <code>http://127.0.0.1:4350/ingest</code> → 中枢更新三张表 → WebSocket 推面板 + persona 逐窗口复命。</blockquote>
+        <p>三件事先记住：</p>
+        <ul>
+          <li><b>端口是 4350</b>，不是 4317（4317 被企业微信占了）。daemon 的 WebSocket 和 HTTP <code>/ingest</code> 共用这一个端口。</li>
+          <li><b>数据单向</b>：v1 是只读仪表盘，面板不能对窗口发指令（那是以后的事）。面板能做的只有：勾/删待办、标记待验收已处理。</li>
+          <li><b>离线缓存会自动补送</b>：如果你之前跑过 Bifrost 但没开中枢，<code>bifrost/cache/ingest.offline.jsonl</code> 里的积压会在中枢第一次应答时被 <code>report.ps1</code> 顺带排空——所以你可能一开中枢就看到一堆历史窗口涌进来，这是对的。</li>
+          <li><b>离线事件只录表、不扰人</b>：积压回放的事件 <code>ts</code> 距今 &gt; 5 分钟时，中枢只更新三张表，<b>不触发 persona 复命、不推 Bark</b>——离线的事你有记录就够了，不用指挥官处理。只有实时事件才会复命/推送。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">1</span>先自检：不开任何窗口，30 秒确认中枢能收</h2>
+        <p>最快的信心来源——不用真窗口，直接手动打一条上报进去看反应。</p>
+        <h3>① 起中枢（Web 面板会连它）</h3>
+        <pre><code>cd D:/GitRep/majordomo
+npm run build          # 确保是最新代码
+node dist/cli.js web   # 内嵌 daemon + Web 面板</code></pre>
+        <p>日志里应出现 <code class="ok">core daemon 监听 http+ws://127.0.0.1:4350（上报入口 /ingest）</code>。浏览器会自动可访问 <code>http://127.0.0.1:4351</code>（web 端口 = daemon+1）。</p>
+        <h3>② 另开一个 git bash，手动灌一条 Stop</h3>
+        <pre><code>curl -s -X POST http://127.0.0.1:4350/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"windowId":"TEST-1","event":"stop","cwd":"D:/GitRep/demo","payload":{"text":"我把登录模块重构完了，抽出了 auth helper"}}'</code></pre>
+        <p>预期返回 <code class="ok">{"ok":true}</code>。</p>
+        <h3>③ 看面板</h3>
+        <p>左栏应立刻冒出一个窗口 <span class="pill b">demo</span>，状态「空闲」；点它，中间会显示一条 <b>persona 人话复命</b>（猫娘口吻，除非你配了真 API），下面是活动流一行 <code>stop</code>。</p>
+        <blockquote>没有 persona API key 也没关系——离线模板会兜底出一句话。要验真人设，配 <code>.env</code> 的 <code>PERSONA_API_*</code> 再重开。</blockquote>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">2</span>灌满三张表：逐事件确认</h2>
+        <p>继续用 curl 把六类事件都打一遍（改 windowId 可造多窗口）。对照下表看面板反应：</p>
+        <table>
+          <tr><th>event</th><th>curl payload 关键字段</th><th>面板预期</th></tr>
+          <tr><td><code>session_start</code></td><td><code>source:"startup"</code></td><td>左栏新窗口，状态 <span class="pill g">空闲</span></td></tr>
+          <tr><td><code>task_created</code></td><td><code>taskId</code>+<code>taskSubject</code></td><td>右栏「全局待办」+1（来源标窗口名），窗口转 <span class="pill b">干活中</span></td></tr>
+          <tr><td><code>task_completed</code></td><td>同一个 <code>taskId</code></td><td>那条待办被<b>划掉</b>（确定性勾销，不烧 LLM）</td></tr>
+          <tr><td><code>stop</code></td><td><code>text:"..."</code> + <code>ts</code></td><td>窗口转空闲；<b>新鲜事件</b>（ts 距今 &le; 5min）触发 persona 复命；<b>陈旧事件</b>只录表不扰人</td></tr>
+          <tr><td><code>notification</code></td><td><code>notificationType:"permission_prompt"</code></td><td>窗口转 <span class="pill y">等你</span>；右栏「待验收」+1；新鲜事件推 Bark，陈旧只录表</td></tr>
+          <tr><td><code>session_end</code></td><td><code>reason:"prompt_input_exit"</code></td><td>窗口状态 <span class="pill">离线</span>，圆点变灰</td></tr>
+        </table>
+        <p>一条 <code>notification</code> 的例子：</p>
+        <pre><code>curl -s -X POST http://127.0.0.1:4350/ingest -H "Content-Type: application/json" \
+  -d '{"windowId":"TEST-1","event":"notification","cwd":"D:/GitRep/demo","payload":{"text":"要删 config.old，等你许可","notificationType":"permission_prompt"}}'</code></pre>
+        <h3>④ 验陈旧事件不扰人</h3>
+        <p>发一条 ts 距今 &gt; 5 分钟的 stop：</p>
+        <pre><code>STALE_TS=$(node -e "console.log(Date.now() - 10*60*1000)")
+curl -s -X POST http://127.0.0.1:4350/ingest \
+  -H "Content-Type: application/json" \
+  -d "{\"windowId\":\"TEST-STALE\",\"event\":\"stop\",\"ts\":$STALE_TS,\"payload\":{\"text\":\"10分钟前的老任务\"}}"</code></pre>
+        <p>预期：左栏出现窗口、活动流有记录，但 <b>没有 persona 复命</b>、<b>没有 Bark 推送</b>。再发一条新鲜 stop（不带 ts 或 ts=现在）→ 立刻复命。这就是"离线回来只录表不炸手机"。</p>
+        <h3>面板手动操作也验一下</h3>
+        <ul>
+          <li>右栏待办框敲一条回车 → 冒出一条 <span class="pill">manual</span> 待办。</li>
+          <li>勾选一条待办 → 划掉；点 <code>×</code> → 删除。</li>
+          <li>待验收点「已处理」→ 该条变灰。</li>
+        </ul>
+        <blockquote>这些操作会广播给<b>所有</b>连着的前端（多开几个浏览器 tab 能看到同步）。刷新页面后状态还在（三张表落盘到 <code>~/.majordomo/hub-*.json</code>）。</blockquote>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">3</span>真窗口端到端（已验收 ✅）</h2>
+        <p>自检过了就可以上真的。中枢保持开着，<b>另开一个新终端</b>挂 Bifrost 干活：</p>
+        <pre><code>cd D:/GitRep/majordomo
+claude --plugin-dir ./bifrost</code></pre>
+        <p>然后正常用：问一句（触发 <code>stop</code>）、让它列个三步计划做（触发 <code>task_created/completed</code>）、让它做需要许可的操作（触发 <code>notification</code>）、<code>/exit</code>（触发 <code>session_end</code>）。</p>
+        <p>面板应实时反映这个真窗口的一举一动，同时你本机还会听到 Bifrost 的提示音/弹窗（那是<b>本机层</b>，和中枢是两层接力）。</p>
+        <blockquote><b>2026-07-02 实测发现</b>：离线缓存排空时每条 stop 都触发 persona，十几条一起炸手机。已修：事件 <code>ts</code> 距今 &gt; 5 分钟就只录表、不触发 persona/Bark。见 §2 ④ 的验证方法。</blockquote>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">4</span>验收清单</h2>
+        <ul class="check">
+          <li><code>npm run build</code> 通过；<code>node dist/cli.js doctor</code> 显示 <code>Hub ingest : http://127.0.0.1:4350/ingest</code></li>
+          <li>curl 一条 <code>stop</code> 返回 <code>{"ok":true}</code>，面板左栏冒出窗口</li>
+          <li>点窗口能看到 persona 人话复命 + 活动流</li>
+          <li><code>task_created</code> 进待办，<code>task_completed</code>（同 taskId）自动划掉</li>
+          <li><code>notification</code> 让窗口转「等你」且进待验收</li>
+          <li><code>session_end</code> 让窗口变灰离线</li>
+          <li>陈旧事件（ts &gt; 5min）只录表不触发 persona/Bark，新鲜事件正常复命</li>
+          <li>面板加/勾/删待办、标记待验收，多 tab 同步、刷新后仍在</li>
+          <li>（可选）真窗口挂 Bifrost，面板实时跟随</li>
+          <li>（可选）配 Bark 后，<code>notification</code> 和复命推到手机</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">5</span>踩坑对照</h2>
+        <table>
+          <tr><th>现象</th><th>原因 / 处置</th></tr>
+          <tr><td>curl 连接被拒</td><td>中枢没起，或端口不是 4350。看 <code>config.jsonc</code> 的 <code>port</code> 与 <code>bifrost/report.config.jsonc</code> 的 <code>ingestUrl</code> 是否都指 4350。</td></tr>
+          <tr><td>面板一片空但 curl 返回 ok</td><td>面板连的是 daemon 的 WS（同端口）。确认浏览器开的是 web 端口（4351），且右上角显示<span class="ok">已连接</span>。</td></tr>
+          <tr><td>真窗口没反应</td><td>Bifrost 只在窗口<b>启动时</b>加载——必须开<b>全新</b>窗口。旧窗口不生效。</td></tr>
+          <tr><td>persona 复命很久才出/没出</td><td>同一窗口有 <code>personaThrottleMs</code>（默认 15s）节流，高频 Stop 会跳过。想每条都出，把配置调小。</td></tr>
+          <tr><td>离线缓存排空时 persona/Bark 炸了</td><td>已修：<code>ts</code> 距今 &gt; 5 分钟的事件只录表不扰人。如果你仍被炸，确认 daemon 已重启（跑的是最新 build）。</td></tr>
+          <tr><td>一开中枢涌进一堆旧窗口</td><td>正常——是离线缓存补送。现在不会触发 persona/Bark 了（见上条）。不想要记录就清空 <code>bifrost/cache/ingest.offline.jsonl</code>。</td></tr>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

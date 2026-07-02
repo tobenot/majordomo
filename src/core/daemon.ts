@@ -1,4 +1,5 @@
 import * as path from "path";
+import * as http from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { Config, resolveProfile, persistActiveProfile } from "./config";
 import { Store } from "./store";
@@ -9,20 +10,25 @@ import { resolveEngineName, EngineChoice } from "../worker/factory";
 import { parseClientMessage, ServerMessage, ClientMessage } from "../protocol/messages";
 import { HookRunner } from "../hooks/hookRunner";
 import { createHookFactory } from "../hooks/factory";
+import { HubService } from "../hub/hub";
+import { IngestEnvelope } from "../hub/types";
 import { createLogger } from "./logger";
 
 const log = createLogger("daemon");
 
 /**
- * 指挥官 core daemon：长驻进程，持有会话池 / 人设层 / 通知器 / 存储，
- * 对外暴露 WebSocket。TUI / Web / 未来远程都是它的客户端，看同一份状态。
+ * 指挥官 core daemon：长驻进程，持有会话池 / 人设层 / 通知器 / 存储 / 中枢，
+ * 对外暴露 WebSocket + HTTP（/ingest 接 Bifrost 上报）。
+ * TUI / Web / 未来远程都是它的客户端，看同一份状态。
  */
 export class CoreDaemon {
   private store = new Store();
   private persona = createPersona(this.cfg.persona);
-  private notifier: NotifierBus = createNotifier(this.cfg.notifiers);
+  private notifier: NotifierBus = createNotifier(this.cfg.notifiers, this.cfg.bark);
   private hooks!: HookRunner;
   private mgr!: SessionManager;
+  private hub!: HubService;
+  private httpServer?: http.Server;
   private wss?: WebSocketServer;
   private clients = new Set<WebSocket>();
   private diaryDir: string;
@@ -44,19 +50,64 @@ export class CoreDaemon {
       (msg) => this.broadcast(msg),
       this.hooks,
     );
+    this.hub = new HubService(
+      this.persona,
+      this.notifier,
+      (msg) => this.broadcast(msg),
+      cfg.hub.personaThrottleMs,
+    );
   }
 
   start(): Promise<{ host: string; port: number }> {
     return new Promise((resolve, reject) => {
-      const wss = new WebSocketServer({ host: this.cfg.host, port: this.cfg.port });
+      const httpServer = http.createServer((req, res) => this.onHttp(req, res));
+      this.httpServer = httpServer;
+      // WebSocket 与 HTTP 共用同一端口：Bifrost 走 POST /ingest，前端走 WS upgrade。
+      const wss = new WebSocketServer({ server: httpServer });
       this.wss = wss;
       wss.on("connection", (ws) => this.onConnection(ws));
-      wss.on("listening", () => {
-        log.info(`core daemon 监听 ws://${this.cfg.host}:${this.cfg.port}`);
+      httpServer.on("error", (e) => reject(e));
+      httpServer.listen(this.cfg.port, this.cfg.host, () => {
+        log.info(`core daemon 监听 http+ws://${this.cfg.host}:${this.cfg.port}（上报入口 ${this.cfg.hub.ingestPath}）`);
         resolve({ host: this.cfg.host, port: this.cfg.port });
       });
-      wss.on("error", (e) => reject(e));
     });
+  }
+
+  /** HTTP 分流：POST /ingest 收 Bifrost 上报；/healthz /readyz 健康检查。其余交给 WS upgrade。 */
+  private onHttp(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const urlPath = (req.url || "/").split("?")[0];
+
+    if (urlPath === "/healthz" || urlPath === "/readyz") {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: true, clients: this.clients.size, windows: this.hub.windows.list().length }));
+      return;
+    }
+
+    if (req.method === "POST" && urlPath === this.cfg.hub.ingestPath) {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > 1_000_000) req.destroy(); // 防爆
+      });
+      req.on("end", () => {
+        try {
+          const env = JSON.parse(body) as IngestEnvelope;
+          this.hub.ingest(env);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          log.warn(`/ingest 解析失败: ${(e as Error).message}`);
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: false, error: "bad json" }));
+        }
+      });
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("404");
   }
 
   private onConnection(ws: WebSocket): void {
@@ -94,6 +145,7 @@ export class CoreDaemon {
           personaName: this.cfg.persona.name,
         });
         this.sendTo(ws, { type: "sessions", sessions: this.mgr.list() });
+        this.sendTo(ws, { type: "hub_snapshot", snapshot: this.hub.snapshot() });
         break;
       }
 
@@ -184,6 +236,27 @@ export class CoreDaemon {
         if (session) session.resolvePermission(msg.requestId, msg.approve, msg.updatedInput);
         break;
       }
+
+      // ── 中枢三张表 ──
+      case "hub_snapshot":
+        this.sendTo(ws, { type: "hub_snapshot", snapshot: this.hub.snapshot() });
+        break;
+
+      case "todo_add":
+        this.hub.addTodo(msg.text, msg.windowId);
+        break;
+
+      case "todo_set_status":
+        this.hub.setTodoStatus(msg.id, msg.status);
+        break;
+
+      case "todo_remove":
+        this.hub.removeTodo(msg.id);
+        break;
+
+      case "acceptance_resolve":
+        this.hub.resolveAcceptance(msg.id);
+        break;
     }
   }
 
@@ -201,5 +274,6 @@ export class CoreDaemon {
   async stop(): Promise<void> {
     await this.mgr.shutdown();
     this.wss?.close();
+    this.httpServer?.close();
   }
 }

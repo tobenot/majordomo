@@ -27,6 +27,7 @@ if ([string]::IsNullOrWhiteSpace($root)) { $root = Split-Path -Parent $PSScriptR
 $cfg = @{
     ingestUrl      = 'http://127.0.0.1:4350/ingest'
     timeoutSec     = 2
+    probeMs        = 200      # TCP reachability precheck before the POST (see Test-HubReachable)
     maxTextLen     = 4000
     notifyStop     = 'beep'   # beep | full | none
     notifyNotify   = 'full'   # full | beep | none
@@ -40,7 +41,7 @@ if (Test-Path $cfgPath) {
         $rawCfg = [regex]::Replace($rawCfg, '(?m)^\s*//.*$', '')
         $rawCfg = [regex]::Replace($rawCfg, '//[^"\r\n]*$', '', 'Multiline')
         $parsed = $rawCfg | ConvertFrom-Json
-        foreach ($k in @('ingestUrl','timeoutSec','maxTextLen','notifyStop','notifyNotify')) {
+        foreach ($k in @('ingestUrl','timeoutSec','probeMs','maxTextLen','notifyStop','notifyNotify')) {
             if ($null -ne $parsed.$k) { $cfg[$k] = $parsed.$k }
         }
     } catch { }
@@ -124,6 +125,25 @@ function Send-Ingest {
         -TimeoutSec ([int]$cfg.timeoutSec) -ErrorAction Stop | Out-Null
 }
 
+# Human decision: precheck the hub with a cheap TCP probe before the POST.
+# Invoke-RestMethod to a dead LOCAL port does NOT return RST fast -- it waits the
+# full TimeoutSec. That 2s sits before the hook process exits, which is exactly
+# why /clear and every turn's end "hang a beat" (the popup already fired above;
+# what stalls here is the turn wrap-up). A ~probeMs TCP connect tells us live-or-dead:
+# hub down -> cache and skip the slow POST + drain. Reporting is best-effort; one
+# round late costs nothing.
+function Test-HubReachable {
+    $u = [Uri]$cfg.ingestUrl
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        $async = $client.BeginConnect($u.Host, $u.Port, $null, $null)
+        $ok = $async.AsyncWaitHandle.WaitOne([int]$cfg.probeMs)
+        if ($ok) { $client.EndConnect($async) }
+        return $ok
+    } catch { return $false }
+    finally { $client.Close() }
+}
+
 function Cache-Offline {
     param([string]$body)
     try {
@@ -205,11 +225,17 @@ switch ($mappedEvent) {
 }
 
 # ---------------------------------------------------------------------------
-# Report to hub LAST. best-effort; a dead hub costs a timeoutSec-second wait that
-# must never sit in front of the popup. Success -> drain backlog; failure -> cache.
+# Report to hub LAST, and only if a ~probeMs TCP precheck says it's up. A dead
+# hub costs one cheap precheck instead of a full timeoutSec-second POST timeout
+# sitting in front of the turn's end. Reachable -> POST + drain backlog;
+# unreachable or POST fails -> cache and move on.
 # ---------------------------------------------------------------------------
-$sent = $false
-try { Send-Ingest $json; $sent = $true } catch { $sent = $false }
-if ($sent) { Drain-Offline } else { Cache-Offline $json }
+if (Test-HubReachable) {
+    $sent = $false
+    try { Send-Ingest $json; $sent = $true } catch { $sent = $false }
+    if ($sent) { Drain-Offline } else { Cache-Offline $json }
+} else {
+    Cache-Offline $json
+}
 
 exit 0

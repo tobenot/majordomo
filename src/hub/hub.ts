@@ -1,0 +1,211 @@
+import { WindowRegistry, TodoStore, AcceptanceStore } from "./stores";
+import {
+  IngestEnvelope,
+  WindowState,
+  HubSnapshot,
+  WindowInfo,
+} from "./types";
+import { PersonaEngine } from "../persona/types";
+import { NotifierBus } from "../notify/factory";
+import { ServerMessage } from "../protocol/messages";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("hub");
+
+/**
+ * 中枢核心：接 Bifrost 上报 → 更新三张表 → 逐窗口 persona 复命 → 广播 + 推 Bark。
+ *
+ * 见 docs/design/bifrost-hub-v1.md §3。数据单向：窗口 → 中枢 → 你，中枢不驱动窗口。
+ * v1 persona = 逐窗口人设层（把每个窗口本轮输出翻人话），不做跨窗口合成。
+ */
+export class HubService {
+  readonly windows = new WindowRegistry();
+  readonly todos = new TodoStore();
+  readonly acceptance = new AcceptanceStore();
+
+  /** 每窗口上次 persona 复命时间，用于节流（高频 Stop 不炸手机）。 */
+  private lastPersonaAt = new Map<string, number>();
+
+  constructor(
+    private persona: PersonaEngine,
+    private notifier: NotifierBus,
+    private broadcast: (msg: ServerMessage) => void,
+    private personaThrottleMs: number,
+  ) {}
+
+  snapshot(): HubSnapshot {
+    return {
+      windows: this.windows.list(),
+      todos: this.todos.list(),
+      acceptance: this.acceptance.list(),
+    };
+  }
+
+  /** 处理一条上报。同步更新表 + 广播；persona 复命异步进行（不阻塞 /ingest 应答）。 */
+  ingest(env: IngestEnvelope): void {
+    if (!env || !env.windowId || !env.event) {
+      log.warn("忽略无效上报（缺 windowId/event）");
+      return;
+    }
+    const cwd = env.cwd ?? "";
+    const p = env.payload ?? {};
+    const stale = isStale(env.ts);
+
+    switch (env.event) {
+      case "session_start": {
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: "idle", summary: `窗口上线 (${p.source ?? "startup"})`,
+        });
+        this.pushWindow(w);
+        break;
+      }
+
+      case "session_end": {
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: "offline", summary: `窗口下线 (${p.reason ?? ""})`.trim(),
+        });
+        this.pushWindow(w);
+        this.broadcast({ type: "window_offline", windowId: env.windowId });
+        break;
+      }
+
+      case "stop": {
+        const text = (p.text ?? "").trim();
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: "idle", summary: summarize(text) || "完成一个回合", lastText: text,
+        });
+        this.pushWindow(w);
+        // 离线缓存排空的事件只录表、不翻人话（陈腐 > 5min 跳过 persona）
+        if (text && !stale) void this.reportPersona(w, text);
+        break;
+      }
+
+      case "notification": {
+        const msg = (p.text ?? "").trim();
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: "waiting", summary: msg || "等待你介入",
+        });
+        this.pushWindow(w);
+        // 窗口等你 = 需你介入 → 记一条待验收。
+        const isPermission = (p.notificationType ?? "").includes("permission");
+        const acc = this.acceptance.add({
+          windowId: env.windowId,
+          what: `${w.title}: ${msg || "窗口等待你"}`,
+          kind: isPermission ? "permission" : "review",
+        });
+        this.broadcast({ type: "acceptance", items: this.acceptance.list() });
+        // 离线缓存排空的 notification 不推 Bark（陈腐 > 5min 跳过）
+        if (!stale) {
+          void this.notifier.notify(`${w.title} 需要你：${msg || "等待介入"}`);
+        }
+        log.debug(`待验收 +1: ${acc.what}`);
+        break;
+      }
+
+      case "task_created": {
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: "working", summary: `新任务：${p.taskSubject ?? p.taskDesc ?? p.taskId ?? "?"}`,
+        });
+        this.pushWindow(w);
+        // 确定性喂养 todolist，不烧 LLM。
+        this.todos.add({
+          text: p.taskSubject || p.taskDesc || `任务 ${p.taskId ?? ""}`.trim(),
+          windowId: env.windowId,
+          source: "task_hook",
+          taskId: p.taskId,
+        });
+        this.broadcast({ type: "todos", todos: this.todos.list() });
+        break;
+      }
+
+      case "task_completed": {
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: "working", summary: `完成任务：${p.taskSubject ?? p.taskDesc ?? p.taskId ?? "?"}`,
+        });
+        this.pushWindow(w);
+        if (p.taskId) this.todos.completeByTaskId(p.taskId);
+        this.broadcast({ type: "todos", todos: this.todos.list() });
+        break;
+      }
+
+      default: {
+        // 未知事件：仍登记，方便回归采样看新事件形状。
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: this.windows.get(env.windowId)?.state ?? "idle",
+          summary: `未知事件 ${env.event}`,
+        });
+        this.pushWindow(w);
+        log.debug(`收到未知事件 ${env.event}`);
+      }
+    }
+  }
+
+  private pushWindow(w: WindowInfo): void {
+    this.broadcast({ type: "window_update", window: w });
+  }
+
+  private async reportPersona(w: WindowInfo, workerText: string): Promise<void> {
+    const now = Date.now();
+    const last = this.lastPersonaAt.get(w.windowId) ?? 0;
+    if (now - last < this.personaThrottleMs) {
+      log.debug(`persona 节流跳过窗口 ${w.title}（距上次 ${now - last}ms）`);
+      return;
+    }
+    this.lastPersonaAt.set(w.windowId, now);
+    try {
+      const text = await this.persona.report({
+        userText: "",
+        workerText,
+        sessionName: w.title,
+      });
+      this.windows.setPersona(w.windowId, text);
+      this.broadcast({ type: "window_persona", windowId: w.windowId, text });
+      void this.notifier.notify(`[${w.title}] ${text}`);
+    } catch (e) {
+      log.warn(`persona 复命失败（窗口 ${w.title}）: ${(e as Error).message}`);
+    }
+  }
+
+  // ── 面板对三张表的操作 ──────────────────────────────────
+  addTodo(text: string, windowId?: string): void {
+    this.todos.add({ text, windowId, source: "manual" });
+    this.broadcast({ type: "todos", todos: this.todos.list() });
+  }
+
+  setTodoStatus(id: string, status: "open" | "done"): void {
+    this.todos.setStatus(id, status);
+    this.broadcast({ type: "todos", todos: this.todos.list() });
+  }
+
+  removeTodo(id: string): void {
+    this.todos.remove(id);
+    this.broadcast({ type: "todos", todos: this.todos.list() });
+  }
+
+  resolveAcceptance(id: string): void {
+    this.acceptance.resolve(id);
+    this.broadcast({ type: "acceptance", items: this.acceptance.list() });
+  }
+}
+
+/** 摘一句话作活动流 summary。取首句 / 首行，截断。 */
+function summarize(text: string): string {
+  if (!text) return "";
+  const flat = text.replace(/\s+/g, " ").trim();
+  const cut = flat.split(/[。.!?！？\n]/)[0] || flat;
+  return cut.length > 80 ? cut.slice(0, 80) + "…" : cut;
+}
+
+/** 事件是否陈腐（离线缓存排空）。阈值 5 分钟——超过说明是积压回放，只录表不扰人。 */
+const STALE_MS = 5 * 60 * 1000;
+function isStale(ts?: number): boolean {
+  if (!ts) return false;
+  return Date.now() - ts > STALE_MS;
+}

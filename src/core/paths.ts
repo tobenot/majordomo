@@ -35,6 +35,11 @@ export function historyDir(): string {
   return path.join(globalDir(), "history");
 }
 
+/** 中枢三张表的持久化文件（windows / todos / acceptance）。 */
+export function hubStorePath(name: "windows" | "todos" | "acceptance"): string {
+  return path.join(globalDir(), `hub-${name}.json`);
+}
+
 /** 项目级 .majordomo/ 数据目录。可用 MAJORDOMO_PROJECT_DIR 覆盖。 */
 export function projectDir(root: string = process.cwd()): string {
   return process.env.MAJORDOMO_PROJECT_DIR

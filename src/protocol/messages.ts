@@ -41,6 +41,10 @@ export interface HistoryEntry {
   text: string;
 }
 
+// ── 中枢三张表（见 hub/types.ts，此处 re-export 供前端协议引用） ──
+import type { WindowInfo, TodoItem, AcceptanceItem, HubSnapshot } from "../hub/types";
+export type { WindowInfo, TodoItem, AcceptanceItem, HubSnapshot } from "../hub/types";
+
 // ─────────────────────────────────────────────────────────────
 // Client → Core
 // ─────────────────────────────────────────────────────────────
@@ -56,7 +60,13 @@ export type ClientMessage =
   | { type: "slash"; sessionId: string; command: string; args?: string }
   | { type: "interrupt"; sessionId: string }
   | { type: "switch_profile"; profile: string }
-  | { type: "permission_response"; sessionId: string; requestId: string; approve: boolean; updatedInput?: Record<string, unknown> };
+  | { type: "permission_response"; sessionId: string; requestId: string; approve: boolean; updatedInput?: Record<string, unknown> }
+  // ── 面板对中枢三张表的操作 ──
+  | { type: "hub_snapshot" }
+  | { type: "todo_add"; text: string; windowId?: string }
+  | { type: "todo_set_status"; id: string; status: "open" | "done" }
+  | { type: "todo_remove"; id: string }
+  | { type: "acceptance_resolve"; id: string };
 
 // ─────────────────────────────────────────────────────────────
 // Core → Client
@@ -75,7 +85,19 @@ export type ServerMessage =
   /** 工作层想做高危操作，请人类批准 */
   | { type: "permission_request"; sessionId: string; requestId: string; tool: string; detail: string; rawInput?: string }
   | { type: "profile_switched"; profile: string }
-  | { type: "error"; message: string; sessionId?: string };
+  | { type: "error"; message: string; sessionId?: string }
+  // ── 中枢广播：三张表的快照与增量 ──
+  /** 新接入前端一次性拿到中枢全量状态 */
+  | { type: "hub_snapshot"; snapshot: HubSnapshot }
+  /** 某窗口注册 / 状态变更 */
+  | { type: "window_update"; window: WindowInfo }
+  | { type: "window_offline"; windowId: string }
+  /** 逐窗口人设复命（中枢的"嘴"），面板挂到对应窗口 */
+  | { type: "window_persona"; windowId: string; text: string }
+  /** 全局待办变更（全量重推，v1 量小无妨） */
+  | { type: "todos"; todos: TodoItem[] }
+  /** 待验收清单变更（全量重推） */
+  | { type: "acceptance"; items: AcceptanceItem[] };
 
 export function parseClientMessage(raw: string): ClientMessage | null {
   try {

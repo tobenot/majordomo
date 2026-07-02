@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>majordomo · 指挥官</title>
+    <title>majordomo · 中枢</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -11,47 +11,50 @@
       <div class="brand">
         <span class="logo">⌘</span>
         <span class="title">majordomo</span>
-        <span class="subtitle" id="personaName">指挥官</span>
+        <span class="subtitle" id="personaName">中枢</span>
       </div>
       <div class="status">
         <span id="connState" class="badge off">未连接</span>
-        <label class="profile">
-          profile:
-          <select id="profileSelect"></select>
-        </label>
         <span id="engineBadge" class="badge"></span>
       </div>
     </header>
 
     <main>
+      <!-- ① 窗口列表 -->
       <aside id="sidebar">
-        <div class="sidebar-head">
-          <span>会话</span>
-          <button id="newBtn" title="新建会话">＋</button>
-        </div>
-        <ul id="sessionList"></ul>
+        <div class="sidebar-head"><span>窗口 <span id="winCount" class="count">0</span></span></div>
+        <ul id="windowList"></ul>
         <div class="cg-frame" title="立绘 / CG 占位（后续迭代）">
           <div class="cg-placeholder">立绘 / CG<br /><small>后续迭代</small></div>
         </div>
       </aside>
 
-      <section id="conversation">
-        <div id="messages"></div>
-        <div id="permission" class="permission hidden">
-          <span id="permText"></span>
-          <button id="approveBtn" class="ok">批准</button>
-          <button id="denyBtn" class="no">拒绝</button>
+      <!-- 选中窗口：活动流 + 人设复命 -->
+      <section id="detail">
+        <div id="detailHead" class="detail-head">
+          <span id="detailTitle">选一个窗口看它在做什么</span>
+          <span id="detailState" class="badge"></span>
         </div>
-        <form id="inputForm">
-          <input
-            id="input"
-            type="text"
-            autocomplete="off"
-            placeholder="输入指令，回车发送（无会话时自动新建）…"
-          />
-          <button type="submit">发送</button>
-        </form>
+        <div id="personaBox" class="persona-box hidden"></div>
+        <div id="activity" class="activity"></div>
       </section>
+
+      <!-- ②③ 全局待办 + 待验收 -->
+      <aside id="rail">
+        <div class="rail-section">
+          <div class="rail-head">
+            <span>全局待办 <span id="todoCount" class="count">0</span></span>
+          </div>
+          <form id="todoForm" class="todo-form">
+            <input id="todoInput" type="text" autocomplete="off" placeholder="加一条待办，回车…" />
+          </form>
+          <ul id="todoList" class="rail-list"></ul>
+        </div>
+        <div class="rail-section">
+          <div class="rail-head"><span>待验收 <span id="accCount" class="count">0</span></span></div>
+          <ul id="acceptanceList" class="rail-list"></ul>
+        </div>
+      </aside>
     </main>
 
     <script>

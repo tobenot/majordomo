@@ -8,6 +8,12 @@
   // POST timeout in seconds. Keep short: the hook must never stall the window.
   "timeoutSec": 2,
 
+  // TCP reachability precheck (ms) before the POST. A dead LOCAL port makes
+  // Invoke-RestMethod wait the full timeoutSec, not RST fast -- that stall used to
+  // hang /clear and every turn's end. Hub unreachable within probeMs -> skip the
+  // slow POST, just cache. Keep it small.
+  "probeMs": 200,
+
   // Truncate last_assistant_message before shipping (0 = no limit).
   "maxTextLen": 4000,
 

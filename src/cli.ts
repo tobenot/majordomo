@@ -166,8 +166,10 @@ async function main(): Promise<void> {
         rows.push([`Rules ${name}`, fs.existsSync(rulesFile) ? `found ${rulesFile}` : `not found ${rulesFile}`]);
       }
       rows.push(["Permission", config.permissionMode === "auto" ? "auto (SDK classifier + canUseTool fallback)" : config.permissionMode]);
+      rows.push(["Hub ingest", `http://${connectHostFor(config.host)}:${config.port}${config.hub.ingestPath}`]);
+      rows.push(["Bark", config.bark ? (config.bark.deviceKey ? "configured" : "baseUrl set, deviceKey missing (env BARK_DEVICE_KEY)") : "not configured (local-only)"]);
       rows.push(["Web assets", fs.existsSync(path.join(__dirname, "web", "public", "index.html")) ? "dist ok" : "missing (run npm run build)"]);
-      rows.push(["Notify script", fs.existsSync(path.join(root, "tools", "notify-done", "notify-done.ps1")) ? "found" : "missing"]);
+      rows.push(["Bifrost plugin", fs.existsSync(path.join(root, "bifrost", "scripts", "report.ps1")) ? "found ./bifrost" : "missing"]);
       const w = Math.max(...rows.map((r) => r[0].length));
       for (const [k, v] of rows) {
         // eslint-disable-next-line no-console

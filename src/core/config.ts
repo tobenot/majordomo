@@ -30,6 +30,20 @@ export interface PersonaConfig {
   projectInstructions?: string;
 }
 
+/** 中枢配置：Bifrost 上报入口。 */
+export interface HubConfig {
+  /** POST 上报路径（挂在 daemon 的 HTTP server 上，与 WebSocket 同端口）。 */
+  ingestPath: string;
+  /** 逐窗口 persona 复命的节流间隔（毫秒）：同一窗口两次复命至少隔这么久，避免高频 Stop 炸手机。 */
+  personaThrottleMs: number;
+}
+
+/** Bark 手机推送配置。deviceKey 建议放 env（BARK_DEVICE_KEY），别进仓。 */
+export interface BarkConfig {
+  baseUrl: string;
+  deviceKey?: string;
+}
+
 export interface Config {
   host: string;
   port: number;
@@ -40,13 +54,15 @@ export interface Config {
   persona: PersonaConfig;
   notifiers: string[];
   diaryDir: string;
+  hub: HubConfig;
+  bark?: BarkConfig;
   /** 工作流 hooks。不配置则 after_task 默认 diary+notify。 */
   hooks?: HooksConfig;
 }
 
 export const DEFAULT_CONFIG: Config = {
   host: "127.0.0.1",
-  port: 4317,
+  port: 4350, // 避开 WXWork 占用的 4317（见 memory）。Bifrost report.config.jsonc 上报地址与此对齐。
   activeProfile: "claude",
   profiles: {
     claude: { command: "claude", personalDir: "~/.claude" },
@@ -58,6 +74,7 @@ export const DEFAULT_CONFIG: Config = {
   persona: { mode: "auto", name: "指挥官", style: "cat-girl-maid" },
   notifiers: ["powershell", "console"],
   diaryDir: ".codebuddy/memory",
+  hub: { ingestPath: "/ingest", personaThrottleMs: 15000 },
 };
 
 const WORKER_ENGINES = new Set(["auto", "sdk", "mock"]);
@@ -250,6 +267,19 @@ function normalizeConfig(cfg: Config): Config {
   if (!PERSONA_MODES.has(cfg.persona?.mode)) cfg.persona = { ...DEFAULT_CONFIG.persona, ...cfg.persona, mode: DEFAULT_CONFIG.persona.mode };
   if (!Array.isArray(cfg.notifiers)) cfg.notifiers = DEFAULT_CONFIG.notifiers;
   if (typeof cfg.diaryDir !== "string" || !cfg.diaryDir.trim()) cfg.diaryDir = DEFAULT_CONFIG.diaryDir;
+  // 中枢配置
+  if (!cfg.hub || typeof cfg.hub !== "object") cfg.hub = { ...DEFAULT_CONFIG.hub };
+  if (typeof cfg.hub.ingestPath !== "string" || !cfg.hub.ingestPath.startsWith("/")) {
+    cfg.hub.ingestPath = DEFAULT_CONFIG.hub.ingestPath;
+  }
+  if (!Number.isInteger(cfg.hub.personaThrottleMs) || cfg.hub.personaThrottleMs < 0) {
+    cfg.hub.personaThrottleMs = DEFAULT_CONFIG.hub.personaThrottleMs;
+  }
+  // Bark：deviceKey 可从 env 兜底注入
+  if (cfg.bark) {
+    if (typeof cfg.bark.baseUrl !== "string" || !cfg.bark.baseUrl.trim()) delete cfg.bark;
+    else if (!cfg.bark.deviceKey && process.env.BARK_DEVICE_KEY) cfg.bark.deviceKey = process.env.BARK_DEVICE_KEY;
+  }
   // 校验 hooks 配置
   if (cfg.hooks) {
     const VALID_EVENTS = new Set(["after_task", "on_session_create", "on_session_close", "on_error"]);

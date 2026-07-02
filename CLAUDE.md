@@ -57,7 +57,15 @@ Engine selection: `auto` → SDK if resolvable else mock; `sdk` → SDK or mock 
 - **Web** (`src/web/server.ts`): static file server over `src/web/public/`, injects daemon's WebSocket URL via `{{WS_URL}}` placeholder in HTML, healthz endpoints at `/healthz` and `/readyz`.
 
 ### Notify (`src/notify/`)
-Pluggable notifier chain: `PowershellNotifier` (sound/toast/TTS via notify-done.ps1) + `ConsoleNotifier` (cross-platform fallback). Diary written in Node via `src/core/diary.ts`.
+Pluggable notifier chain: `PowershellNotifier` (sound/toast/TTS via notify-done.ps1) + `ConsoleNotifier` (cross-platform fallback) + `BarkNotifier` (phone push, needs `bark` config). Diary written in Node via `src/core/diary.ts`.
+
+### Hub (`src/hub/`) — 接收 Bifrost 上报的中枢
+v1：接收原生 CC 窗口经 **Bifrost 插件**（`bifrost/`）上报的 hook 事件，维护三张表，逐窗口 persona 复命。见 `docs/design/bifrost-hub-v1.md`。
+
+- `HubService` (`src/hub/hub.ts`): `ingest(envelope)` → 按 event 更新三张表 → WebSocket 广播 + persona 复命（每窗口 `personaThrottleMs` 节流）。
+- 三张表 (`src/hub/stores.ts`, JSON 落盘 `~/.majordomo/hub-*.json`): `WindowRegistry`（每窗口在做什么，state 由事件推导）/ `TodoStore`（全局待办，`task_created/completed` 走 taskId **确定性**增删，不烧 LLM）/ `AcceptanceStore`（待验收，`notification` 触发）。
+- 入口：daemon 的 HTTP server 上 **`POST /ingest`**，与 WebSocket **共用端口 4350**（避开 WXWork 占的 4317）。Bifrost `report.config.jsonc` 的 `ingestUrl` 必须与此一致。
+- 数据单向：窗口 → Bifrost → 中枢 → 你。v1 面板只读（展示三张表 + 勾/删待办、标记验收），不向窗口回话。
 
 ## Key Design Decisions
 
@@ -90,3 +98,8 @@ Pluggable notifier chain: `PowershellNotifier` (sound/toast/TTS via notify-done.
 | `src/hooks/factory.ts` | Dependency-injected hook factory |
 | `src/hooks/builtin/shellHook.ts` | Shell command hook (UE compile etc.) |
 | `src/hooks/builtin/markdownReportHook.ts` | Markdown report generation |
+| `src/hub/hub.ts` | 中枢核心：ingest → 三张表 → 复命/广播 |
+| `src/hub/stores.ts` | WindowRegistry / TodoStore / AcceptanceStore（JSON 落盘）|
+| `src/hub/types.ts` | 上报载荷 + 三张表数据模型 |
+| `src/notify/barkNotifier.ts` | Bark 手机推送 |
+| `bifrost/scripts/report.ps1` | 窗口侧上报脚本（hook → POST /ingest + 本地弹窗）|

@@ -1,4 +1,5 @@
-// majordomo Web 面板：直连 core daemon 的 WebSocket，看与 TUI 同一份状态。
+// majordomo 中枢面板：直连 core daemon 的 WebSocket，看三张表（窗口 / 待办 / 待验收）。
+// v1 是逐窗口只读仪表盘：窗口 → Bifrost → 中枢 → 你（单向）。面板只做展示 + 待办/验收的轻量维护。
 (function () {
   "use strict";
 
@@ -19,11 +20,14 @@
 
   const state = {
     ws: null,
-    sessions: [],
-    current: null,
-    personaName: "指挥官",
-    pendingPermission: null,
+    windows: [], // WindowInfo[]
+    todos: [],
+    acceptance: [],
+    current: null, // 选中的 windowId
+    personaName: "中枢",
   };
+
+  const STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
 
   // ── 连接 ──────────────────────────────────────────────
   function connect() {
@@ -42,9 +46,7 @@
   }
 
   function send(msg) {
-    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(JSON.stringify(msg));
-    }
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify(msg));
   }
 
   function setConn(ok) {
@@ -59,175 +61,198 @@
       case "welcome":
         state.personaName = msg.personaName;
         el("personaName").textContent = msg.personaName;
-        el("engineBadge").textContent = "工作层: " + msg.engine;
-        fillProfiles(msg.profiles, msg.activeProfile);
+        el("engineBadge").textContent = "人设: " + msg.personaName;
         break;
-      case "sessions":
-        state.sessions = msg.sessions;
-        renderSessions();
+      case "hub_snapshot":
+        state.windows = msg.snapshot.windows || [];
+        state.todos = msg.snapshot.todos || [];
+        state.acceptance = msg.snapshot.acceptance || [];
+        renderAll();
         break;
-      case "session_created":
-        upsertSession(msg.session);
-        selectSession(msg.session.id);
-        if (state.pendingFirstInput) {
-          const t = state.pendingFirstInput;
-          state.pendingFirstInput = null;
-          addMessage("user", t);
-          send({ type: "user_input", sessionId: msg.session.id, text: t });
-        }
+      case "window_update":
+        upsertWindow(msg.window);
         break;
-      case "session_closed":
-        state.sessions = state.sessions.filter((s) => s.id !== msg.sessionId);
-        if (state.current === msg.sessionId) state.current = null;
-        renderSessions();
+      case "window_offline":
+        markOffline(msg.windowId);
         break;
-      case "history":
-        if (msg.sessionId === state.current) {
-          clearMessages();
-          msg.entries.forEach((e) => addMessage(e.channel, e.text));
-        }
+      case "window_persona":
+        applyPersona(msg.windowId, msg.text);
         break;
-      case "worker_message":
-        if (msg.sessionId === state.current) addMessage("worker", msg.text);
+      case "todos":
+        state.todos = msg.todos || [];
+        renderTodos();
         break;
-      case "persona_message":
-        if (msg.sessionId === state.current) addMessage("persona", msg.text, state.personaName);
-        break;
-      case "session_state":
-        updateSessionState(msg.sessionId, msg.state);
-        break;
-      case "permission_request":
-        if (msg.sessionId === state.current) showPermission(msg);
-        break;
-      case "profile_switched":
-        el("profileSelect").value = msg.profile;
-        addMessage("system", "已切换 profile → " + msg.profile + "（只影响新开会话）");
+      case "acceptance":
+        state.acceptance = msg.items || [];
+        renderAcceptance();
         break;
       case "error":
-        addMessage("system", "错误: " + msg.message);
+        console.warn("中枢错误:", msg.message);
         break;
     }
   }
 
-  function fillProfiles(profiles, active) {
-    const sel = el("profileSelect");
-    sel.innerHTML = "";
-    profiles.forEach((p) => {
-      const o = document.createElement("option");
-      o.value = p;
-      o.textContent = p;
-      if (p === active) o.selected = true;
-      sel.appendChild(o);
-    });
+  // ── ① 窗口 ────────────────────────────────────────────
+  function upsertWindow(w) {
+    const i = state.windows.findIndex((x) => x.windowId === w.windowId);
+    if (i >= 0) state.windows[i] = w;
+    else state.windows.unshift(w);
+    renderWindows();
+    if (state.current === w.windowId) renderDetail();
   }
 
-  // ── 会话列表 ──────────────────────────────────────────
-  function upsertSession(s) {
-    const i = state.sessions.findIndex((x) => x.id === s.id);
-    if (i >= 0) state.sessions[i] = s;
-    else state.sessions.unshift(s);
-    renderSessions();
+  function markOffline(id) {
+    const w = state.windows.find((x) => x.windowId === id);
+    if (w) w.state = "offline";
+    renderWindows();
+    if (state.current === id) renderDetail();
   }
 
-  function updateSessionState(id, st) {
-    const s = state.sessions.find((x) => x.id === id);
-    if (s) {
-      s.state = st;
-      renderSessions();
-    }
+  function applyPersona(id, text) {
+    const w = state.windows.find((x) => x.windowId === id);
+    if (w) w.lastPersona = text;
+    if (state.current === id) renderDetail();
+    renderWindows();
   }
 
-  function renderSessions() {
-    const ul = el("sessionList");
+  function sortedWindows() {
+    return state.windows.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  function renderWindows() {
+    const ul = el("windowList");
     ul.innerHTML = "";
-    state.sessions.forEach((s) => {
+    const ws = sortedWindows();
+    el("winCount").textContent = ws.filter((w) => w.state !== "offline").length;
+    ws.forEach((w) => {
       const li = document.createElement("li");
-      if (s.id === state.current) li.className = "active";
+      if (w.windowId === state.current) li.className = "active";
       li.innerHTML =
-        '<div class="s-name">' +
-        escapeHtml(s.name) +
-        "</div><div class=\"s-meta\">" +
-        s.id +
+        '<div class="s-name"><span class="dot ' + w.state + '"></span>' +
+        escapeHtml(w.title) +
+        '</div><div class="s-meta">' +
+        (STATE_LABEL[w.state] || w.state) +
         " · " +
-        s.profile +
-        "/" +
-        s.engine +
-        " · " +
-        s.state +
+        escapeHtml(oneLine(w.lastPersona || w.lastText || "", 40)) +
         "</div>";
-      li.onclick = () => selectSession(s.id);
+      li.onclick = () => selectWindow(w.windowId);
       ul.appendChild(li);
     });
   }
 
-  function selectSession(id) {
+  function selectWindow(id) {
     state.current = id;
-    renderSessions();
-    clearMessages();
-    send({ type: "get_history", sessionId: id });
+    renderWindows();
+    renderDetail();
   }
 
-  // ── 消息区 ────────────────────────────────────────────
-  function clearMessages() {
-    el("messages").innerHTML = "";
-    hidePermission();
-  }
-
-  function addMessage(channel, text, who) {
-    const wrap = document.createElement("div");
-    wrap.className = "msg " + channel;
-    const whoLabel = who || labelOf(channel);
-    wrap.innerHTML =
-      '<div class="who">' + escapeHtml(whoLabel) + '</div><div class="body">' + escapeHtml(text) + "</div>";
-    const box = el("messages");
-    box.appendChild(wrap);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function labelOf(channel) {
-    return { user: "我", worker: "工作层", persona: state.personaName, system: "系统" }[channel] || channel;
-  }
-
-  // ── 权限 ──────────────────────────────────────────────
-  function showPermission(msg) {
-    state.pendingPermission = msg;
-    el("permText").textContent = "⚠ 工作层请求权限 [" + msg.tool + "]: " + msg.detail;
-    el("permission").classList.remove("hidden");
-  }
-  function hidePermission() {
-    state.pendingPermission = null;
-    el("permission").classList.add("hidden");
-  }
-  function answerPermission(approve) {
-    const p = state.pendingPermission;
-    if (!p) return;
-    send({ type: "permission_response", sessionId: p.sessionId, requestId: p.requestId, approve });
-    hidePermission();
-  }
-
-  // ── 输入与控件 ────────────────────────────────────────
-  el("inputForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const input = el("input");
-    const text = input.value.trim();
-    if (!text) return;
-    if (!state.current) {
-      send({ type: "create_session", name: text.slice(0, 20) });
-      state.pendingFirstInput = text;
-    } else {
-      addMessage("user", text);
-      send({ type: "user_input", sessionId: state.current, text });
+  function renderDetail() {
+    const w = state.windows.find((x) => x.windowId === state.current);
+    const pBox = el("personaBox");
+    const act = el("activity");
+    if (!w) {
+      el("detailTitle").textContent = "选一个窗口看它在做什么";
+      el("detailState").textContent = "";
+      el("detailState").className = "badge";
+      pBox.classList.add("hidden");
+      act.innerHTML = "";
+      return;
     }
-    input.value = "";
+    el("detailTitle").textContent = w.title + "  ·  " + w.cwd;
+    const sb = el("detailState");
+    sb.textContent = STATE_LABEL[w.state] || w.state;
+    sb.className = "badge state-" + w.state;
+
+    if (w.lastPersona) {
+      pBox.classList.remove("hidden");
+      pBox.innerHTML = '<div class="who">' + escapeHtml(state.personaName) + "</div><div class=\"body\">" + escapeHtml(w.lastPersona) + "</div>";
+    } else {
+      pBox.classList.add("hidden");
+    }
+
+    act.innerHTML = "";
+    (w.activity || []).slice().reverse().forEach((a) => {
+      const row = document.createElement("div");
+      row.className = "act-row";
+      row.innerHTML =
+        '<span class="act-ts">' + fmtTime(a.ts) + '</span>' +
+        '<span class="act-ev ev-' + escapeHtml(a.event) + '">' + escapeHtml(a.event) + "</span>" +
+        '<span class="act-sum">' + escapeHtml(a.summary) + "</span>";
+      act.appendChild(row);
+    });
+  }
+
+  // ── ② 待办 ────────────────────────────────────────────
+  function renderTodos() {
+    const ul = el("todoList");
+    ul.innerHTML = "";
+    const open = state.todos.filter((t) => t.status === "open");
+    el("todoCount").textContent = open.length;
+    state.todos
+      .slice()
+      .sort((a, b) => (a.status === b.status ? a.createdAt - b.createdAt : a.status === "open" ? -1 : 1))
+      .forEach((t) => {
+        const li = document.createElement("li");
+        li.className = "todo " + t.status;
+        const win = state.windows.find((w) => w.windowId === t.windowId);
+        li.innerHTML =
+          '<input type="checkbox" ' + (t.status === "done" ? "checked" : "") + " />" +
+          '<span class="todo-text">' + escapeHtml(t.text) + "</span>" +
+          '<span class="todo-src">' + (win ? escapeHtml(win.title) : t.source) + "</span>" +
+          '<button class="x" title="删除">×</button>';
+        li.querySelector("input").onchange = (e) =>
+          send({ type: "todo_set_status", id: t.id, status: e.target.checked ? "done" : "open" });
+        li.querySelector(".x").onclick = () => send({ type: "todo_remove", id: t.id });
+        ul.appendChild(li);
+      });
+  }
+
+  el("todoForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const inp = el("todoInput");
+    const text = inp.value.trim();
+    if (!text) return;
+    send({ type: "todo_add", text: text, windowId: state.current || undefined });
+    inp.value = "";
   });
 
-  // 新会话创建后，待发首条输入在 session_created 分支处理（见上）。
+  // ── ③ 待验收 ──────────────────────────────────────────
+  function renderAcceptance() {
+    const ul = el("acceptanceList");
+    ul.innerHTML = "";
+    const pending = state.acceptance.filter((a) => a.status === "pending");
+    el("accCount").textContent = pending.length;
+    state.acceptance
+      .slice()
+      .sort((a, b) => (a.status === b.status ? b.createdAt - a.createdAt : a.status === "pending" ? -1 : 1))
+      .forEach((a) => {
+        const li = document.createElement("li");
+        li.className = "acc " + a.status + " kind-" + a.kind;
+        li.innerHTML =
+          '<span class="acc-kind">' + escapeHtml(a.kind) + "</span>" +
+          '<span class="acc-what">' + escapeHtml(a.what) + "</span>" +
+          (a.status === "pending" ? '<button class="ok">已处理</button>' : '<span class="acc-done">✓</span>');
+        const btn = li.querySelector("button");
+        if (btn) btn.onclick = () => send({ type: "acceptance_resolve", id: a.id });
+        ul.appendChild(li);
+      });
+  }
 
-  el("newBtn").onclick = () => send({ type: "create_session" });
-  el("approveBtn").onclick = () => answerPermission(true);
-  el("denyBtn").onclick = () => answerPermission(false);
-  el("profileSelect").onchange = (e) => send({ type: "switch_profile", profile: e.target.value });
+  function renderAll() {
+    renderWindows();
+    renderDetail();
+    renderTodos();
+    renderAcceptance();
+  }
 
+  // ── 工具 ──────────────────────────────────────────────
+  function oneLine(s, n) {
+    s = String(s || "").replace(/\s+/g, " ").trim();
+    return s.length > n ? s.slice(0, n) + "…" : s;
+  }
+  function fmtTime(ts) {
+    try { return new Date(ts).toLocaleTimeString(); } catch { return ""; }
+  }
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }

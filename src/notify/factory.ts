@@ -1,6 +1,8 @@
 import { Notifier } from "./types";
 import { PowershellNotifier } from "./powershellNotifier";
 import { ConsoleNotifier } from "./consoleNotifier";
+import { BarkNotifier } from "./barkNotifier";
+import { BarkConfig } from "../core/config";
 import { createLogger } from "../core/logger";
 
 const log = createLogger("notify:factory");
@@ -21,7 +23,7 @@ export class NotifierBus implements Notifier {
   }
 }
 
-export function createNotifier(names: string[]): NotifierBus {
+export function createNotifier(names: string[], bark?: BarkConfig): NotifierBus {
   const list: Notifier[] = [];
   for (const name of names) {
     switch (name) {
@@ -30,6 +32,10 @@ export function createNotifier(names: string[]): NotifierBus {
         break;
       case "console":
         list.push(new ConsoleNotifier());
+        break;
+      case "bark":
+        if (bark) list.push(new BarkNotifier(bark));
+        else log.warn("notifiers 含 bark 但缺少 bark 配置，已跳过");
         break;
       default:
         log.warn(`未知通知器: ${name}`);

@@ -3,8 +3,9 @@
 {
   // ── 网络 ──────────────────────────────────────────────
   // core daemon 监听地址。初期只听 localhost；未来远程接入再改 host/加 TLS。
+  // WebSocket（前端）与 HTTP（Bifrost 上报 /ingest）共用这一个端口。
   "host": "127.0.0.1",
-  "port": 4317,
+  "port": 4350, // 避开 WXWork 占用的 4317；Bifrost report.config.jsonc 的 ingestUrl 必须与此一致
 
   // ── Profile：claude / claude-internal / tclaude 一键切换 ──
   // 关键坑：内网版个人规则目录是 .claude-internal（它自己会说成 .claude，那是错的）。
@@ -58,7 +59,22 @@
   // ── 通知 notifier（可插拔，按顺序全部触发）────────────────
   // powershell：复用第二代 tools/notify-done 脚本（提示音/浮窗/TTS/日记）
   // console：跨平台降级，仅打印
+  // bark：手机推送（离场兜底）。需下方 bark 配置 + deviceKey。
   "notifiers": ["powershell", "console"],
+
+  // ── 中枢 Hub（Bifrost 上报入口）────────────────────────
+  // ingestPath：Bifrost POST 上报路径，挂在 daemon 的 HTTP server 上（与 WS 同端口）。
+  // personaThrottleMs：逐窗口 persona 复命节流，同一窗口两次复命至少隔这么久（防高频 Stop 炸手机）。
+  "hub": {
+    "ingestPath": "/ingest",
+    "personaThrottleMs": 15000
+  },
+
+  // ── Bark 手机推送（可选）────────────────────────────────
+  // 你在电脑前靠本机弹窗，离场了靠 Bark。deviceKey 建议放 .env 的 BARK_DEVICE_KEY，别进仓。
+  // "bark": {
+  //   "baseUrl": "https://api.day.app"
+  // },
 
   // 日记目录（相对项目根）。沿用第二代习惯。
   "diaryDir": ".codebuddy/memory",
