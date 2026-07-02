@@ -1,0 +1,20 @@
+// report.config.jsonc - Bifrost formal reporter config
+// The ONE thing Bifrost depends on: a POST-able hub /ingest URL (design 8, zero hub dep).
+// Hub not running yet? report.ps1 caches to cache/ingest.offline.jsonl and drains next time.
+{
+  // Hub ingest endpoint. Port 4350 avoids WXWork's 4317 (see memory).
+  "ingestUrl": "http://127.0.0.1:4350/ingest",
+
+  // POST timeout in seconds. Keep short: the hook must never stall the window.
+  "timeoutSec": 2,
+
+  // Truncate last_assistant_message before shipping (0 = no limit).
+  "maxTextLen": 4000,
+
+  // Local side effect per event. Stop fires every turn -> keep it light.
+  //   beep | full | none
+  "notifyStop": "beep",
+  // Notification = the window actually needs you -> the full alarm belongs here.
+  //   full | beep | none
+  "notifyNotify": "full"
+}

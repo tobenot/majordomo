@@ -1,33 +1,49 @@
-# Bifrost 探针版（v0 · 施工第 0 步）
+# Bifrost（虹桥）· v0.1
 
-对应设计稿 `docs/design/bifrost-hub-v1.md` §2.6。
+装进每个 Claude Code 窗口的插件。用 hook 把窗口活动上报中枢，并在本地放提示音/弹窗。
+对应设计稿 `docs/design/bifrost-hub-v1.md`。
 
-**这不是正式插件。** 唯一目的：把每个 hook 的 stdin 原样落盘，实测各事件真实 payload 形状，再据实回填设计稿的事件表/载荷（§2.2 / §2.5），然后才写正式的 `report.ps1`。「加日志定位」代替「拿文档当真」。
+> 探针阶段（v0）已结束——六事件 payload 形状实测完毕（见设计稿 §2.2.1）。本目录现在是**正式上报版**：`report.ps1` 取代 `probe.ps1` 挂在六个 hook 上。`probe.ps1` 留作回归采样工具。
 
 ## 装上（开发期）
 
 ```bash
 claude --plugin-dir ./bifrost        # 从磁盘目录直接加载
-# 改完热载：/reload-plugins
+# 改完热载：/reload-plugins（改 plugin.json 需重开窗口）
 ```
 
-订阅了 6 个候选事件：`SessionStart` `Stop` `Notification` `TaskCreated` `TaskCompleted` `SessionEnd`。每次触发，`scripts/probe.ps1` 把 stdin 原样追加一行到本目录的 `dump.jsonl`：
+## 它做什么
 
-```jsonc
-{ "receivedAt": "<ISO 时刻>", "rawStdin": "<hook 原始 stdin 文本>" }
-```
+订阅六个事件：`SessionStart` `Stop` `Notification` `TaskCreated` `TaskCompleted` `SessionEnd`。每次触发 `scripts/report.ps1`：
 
-## 怎么用
+1. **设 UTF-8 输入编码**再读 stdin（否则 `last_assistant_message` 中文乱码）。
+2. **按 `hook_event_name` 分流**，整形成设计稿 §2.5 的统一载荷（`windowId`/`event`/`cwd`/`ts`/`payload`）。`Stop` 直取 `last_assistant_message` 全文。
+3. **POST 到中枢 `/ingest`**（短超时，best-effort，绝不卡窗口）。
+4. **中枢没开就落盘缓存**（`cache/ingest.offline.jsonl`），下次中枢应答时**顺带补送**整个积压队列。
+5. **本地副作用**（Windows）：`Stop` → 提示音；`Notification`（窗口等你）→ 完整提示工具链弹窗。
+6. 永远 `exit 0`。
 
-1. 装上，开一个真实 CC 窗口干点活（触发回合结束、建任务、等许可、退出）。
-2. 看 `dump.jsonl` 里各事件到底长什么样——尤其确认：
-   - `Stop` 是否真的**不带**助手输出文本（只有公共字段）；
-   - `TaskCreated` / `TaskCompleted` 是否存在、带哪些字段；
-   - `Notification` 的语境字段。
-3. 据实回填设计稿，再写正式 `report.ps1`（读 transcript + 上报 /ingest + 本地提示音）。
+## 配置：`report.config.jsonc`
+
+Bifrost 唯一的对外依赖就是一个能 POST 的 `/ingest` URL（设计稿 §8：零中枢依赖，可 subtree-split 独立）。
+
+| 键 | 说明 |
+|---|---|
+| `ingestUrl` | 中枢上报地址，默认 `http://127.0.0.1:4350/ingest`（4350 避开 WXWork 占的 4317）|
+| `timeoutSec` | POST 超时秒数，保持短 |
+| `maxTextLen` | `last_assistant_message` 上报前截断长度（0 = 不限）|
+| `notifyStop` | `Stop` 本地效果：`beep` / `full` / `none`。Stop 每回合都触发，默认只 beep |
+| `notifyNotify` | `Notification` 本地效果：`full` / `beep` / `none`。窗口真等你，默认整套弹窗 |
+
+## 本地提示工具链
+
+`notify-*.ps1` + `notify-done.config.ps1` 迁移自第二代 `tools/notify-done`（提示音合成 / TTS / WPF 浮窗 / 任务栏闪烁）。放进 bifrost 内部保持插件**自包含**——未来 `git subtree split` 可零成本拆独立仓。用户覆盖写 `notify-done.config.user.ps1`（不入仓）。
+
+> 本机提示音（Bifrost）和 手机 Bark（中枢）是两层接力：你在电脑前靠 Bifrost，离场了靠中枢 Bark，不重复。
 
 ## 已知小事
 
-- 脚本必须存为 **UTF-8 with BOM**，否则 PowerShell 5.x 按 ANSI 读，中文注释会让脚本解析失败。
-- PS 5.x 的 `Add-Content -Encoding UTF8` 会在 `dump.jsonl` **文件首**写一个 BOM，只影响第一行开头，肉眼分析无碍；若用严格 JSONL 解析器读，记得跳过首字节。
-- 探针只写盘、不上报、不阻断、无本地副作用，永远 `exit 0`。
+- 脚本读 stdin 前必须设 UTF-8（`report.ps1` 已内置），否则中文全文乱码。
+- `report.ps1` 源码故意全 ASCII 注释，PS 5.1 无论 BOM 与否都能解析。
+- `Notification` 子类型未穷举（已见 `permission_prompt`/`idle_prompt`，还有 `auth_success` 等），脚本不假设穷举。
+- `dump.jsonl` / `cache/` / `*.offline.jsonl` / `*.log` 均 gitignore，不入仓。

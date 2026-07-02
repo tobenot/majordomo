@@ -2,6 +2,6 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "bifrost",
   "displayName": "Bifrost (虹桥)",
-  "version": "0.0.1",
-  "description": "探针版：把每个 hook 的 stdin 原样 dump 到 dump.jsonl，用于实测 payload 形状。正式上报逻辑待回填。"
+  "version": "0.1.0",
+  "description": "虹桥：每个窗口的 hook 事件经 report.ps1 上报中枢 /ingest（离线缓存补送），并在本地放提示音/弹窗。"
 }

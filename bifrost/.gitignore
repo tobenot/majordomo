@@ -1,5 +1,10 @@
 # 探针实测产物，不进仓
 dump.jsonl
-# 未来正式版的离线缓存
+# 离线缓存 + 音效缓存（正式版运行时产物）
 cache/
 *.offline.jsonl
+# notify 工具链运行时产物 / 用户覆盖
+*.log
+*.err
+*.out
+notify-done.config.user.ps1
