@@ -5,6 +5,10 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+# CC 喂的 stdin 是 UTF-8；PS 默认按本地代码页(GBK)解码会把中文读成乱码。
+# last_assistant_message 含中文全文，正式版据此写日记/上报，必须先纠正编码。
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+
 # 读全量 stdin（可能为空；SessionStart 等也可能不给 body）
 $raw = [Console]::In.ReadToEnd()
 

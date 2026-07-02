@@ -3,6 +3,5 @@
   "name": "bifrost",
   "displayName": "Bifrost (虹桥)",
   "version": "0.0.1",
-  "description": "探针版：把每个 hook 的 stdin 原样 dump 到 dump.jsonl，用于实测 payload 形状。正式上报逻辑待回填。",
-  "hooks": "./hooks/hooks.json"
+  "description": "探针版：把每个 hook 的 stdin 原样 dump 到 dump.jsonl，用于实测 payload 形状。正式上报逻辑待回填。"
 }
