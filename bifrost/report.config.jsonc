@@ -11,9 +11,9 @@
   // Truncate last_assistant_message before shipping (0 = no limit).
   "maxTextLen": 4000,
 
-  // Local side effect per event. Stop fires every turn -> keep it light.
+  // Local side effect per event. Stop fires every turn -> full alarm every turn, by design.
   //   beep | full | none
-  "notifyStop": "beep",
+  "notifyStop": "full",
   // Notification = the window actually needs you -> the full alarm belongs here.
   //   full | beep | none
   "notifyNotify": "full"

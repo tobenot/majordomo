@@ -20,7 +20,7 @@ claude --plugin-dir ./bifrost        # 从磁盘目录直接加载
 2. **按 `hook_event_name` 分流**，整形成设计稿 §2.5 的统一载荷（`windowId`/`event`/`cwd`/`ts`/`payload`）。`Stop` 直取 `last_assistant_message` 全文。
 3. **POST 到中枢 `/ingest`**（短超时，best-effort，绝不卡窗口）。
 4. **中枢没开就落盘缓存**（`cache/ingest.offline.jsonl`），下次中枢应答时**顺带补送**整个积压队列。
-5. **本地副作用**（Windows）：`Stop` → 提示音；`Notification`（窗口等你）→ 完整提示工具链弹窗。
+5. **本地副作用**（Windows）：`Stop` → 完整提示工具链弹窗（每回合都触发，就是要回合一结束你立刻知道）；`Notification`（窗口等你）→ 同样完整弹窗。
 6. 永远 `exit 0`。
 
 ## 配置：`report.config.jsonc`
@@ -32,7 +32,7 @@ Bifrost 唯一的对外依赖就是一个能 POST 的 `/ingest` URL（设计稿 
 | `ingestUrl` | 中枢上报地址，默认 `http://127.0.0.1:4350/ingest`（4350 避开 WXWork 占的 4317）|
 | `timeoutSec` | POST 超时秒数，保持短 |
 | `maxTextLen` | `last_assistant_message` 上报前截断长度（0 = 不限）|
-| `notifyStop` | `Stop` 本地效果：`beep` / `full` / `none`。Stop 每回合都触发，默认只 beep |
+| `notifyStop` | `Stop` 本地效果：`beep` / `full` / `none`。Stop 每回合都触发，默认 `full`——每回合全提示，就是要你回合结束就知道 |
 | `notifyNotify` | `Notification` 本地效果：`full` / `beep` / `none`。窗口真等你，默认整套弹窗 |
 
 ## 本地提示工具链
