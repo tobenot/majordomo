@@ -1,0 +1,130 @@
+/* majordomo 交接浮窗：无边框小窗，复用面板暗色调，为窄窗（~440px）优化。 */
+:root {
+  --bg: #0e1016;
+  --panel: #151823;
+  --panel2: #1b1f2e;
+  --border: #2a3042;
+  --text: #e8ebf2;
+  --text2: #98a0b3;
+  --accent: #4d8dff;
+  --accent2: #b46bff;
+  --green: #35c46a;
+  --yellow: #e6b450;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  overflow: hidden;
+  user-select: none;
+}
+
+.card {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #191d2c, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+/* 新交接进来时脉冲一下边框，提示"有更新" */
+.card.pulse { animation: pulse 1.1s ease-out; }
+@keyframes pulse {
+  0% { border-color: var(--accent2); box-shadow: 0 0 0 0 rgba(180, 107, 255, 0.5), 0 12px 40px rgba(0,0,0,0.5); }
+  100% { border-color: var(--border); box-shadow: 0 0 0 12px rgba(180, 107, 255, 0), 0 12px 40px rgba(0,0,0,0.5); }
+}
+
+/* ── 头部（可拖拽） ── */
+header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #1c2233, var(--panel));
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag; /* Edge app 模式下整条头部可拖窗 */
+  flex: none;
+}
+header button, header .conn { -webkit-app-region: no-drag; }
+.logo { color: var(--accent); font-size: 16px; }
+.proj { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.spacer { flex: 1; }
+.time { color: var(--text2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.conn { width: 8px; height: 8px; border-radius: 50%; background: #4a4f60; flex: none; }
+.conn.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.conn.off { background: #4a4f60; }
+
+/* ── persona 全文 ── */
+.persona {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 12px 16px;
+}
+.who { font-size: 12px; color: var(--accent2); margin-bottom: 6px; }
+.body { line-height: 1.6; font-size: 14px; word-break: break-word; }
+.body p { margin: 0 0 8px; }
+.body h1, .body h2, .body h3 { margin: 12px 0 6px; line-height: 1.3; }
+.body h1 { font-size: 17px; }
+.body h2 { font-size: 15px; }
+.body h3 { font-size: 14px; color: var(--text2); }
+.body ul, .body ol { margin: 4px 0 8px; padding-left: 22px; }
+.body li { margin: 2px 0; }
+.body strong { color: #fff; }
+.body em { color: var(--accent2); font-style: normal; }
+.body a { color: var(--accent); }
+.body code {
+  font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+}
+.body pre {
+  background: #0b0d14; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; margin: 8px 0; overflow-x: auto;
+}
+.body pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
+.body .empty { color: var(--text2); font-style: italic; }
+
+/* ── 本轮活动 mini 流 ── */
+.acts {
+  flex: none; max-height: 128px; overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding: 8px 16px 10px;
+}
+.acts-head { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+.act-row {
+  display: grid; grid-template-columns: 52px 74px 1fr; gap: 8px; align-items: baseline;
+  padding: 3px 0; font-size: 12px;
+}
+.act-ts { color: var(--text2); font-size: 10px; }
+.act-ev {
+  font-size: 10px; text-align: center; padding: 0 5px; border-radius: 5px;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-ev.ev-stop { color: var(--green); border-color: var(--green); }
+.act-ev.ev-notification { color: var(--yellow); border-color: var(--yellow); }
+.act-ev.ev-task_created, .act-ev.ev-task_completed { color: var(--accent); border-color: var(--accent); }
+.act-sum { color: var(--text); word-break: break-word; }
+
+/* ── 底部按钮 ── */
+footer {
+  flex: none; display: flex; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid var(--border); background: var(--panel);
+}
+footer button {
+  flex: 1; padding: 8px 6px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+}
+footer button:hover { background: #232838; }
+footer button.primary { background: var(--accent); color: #fff; border-color: var(--accent); flex: 1.4; }
+footer button.primary:hover { background: #6aa0ff; }
+footer button.copied { background: var(--green); color: #fff; border-color: var(--green); }
+
+/* 收起态：只留头部一条，待命不打扰 */
+.card.collapsed .persona,
+.card.collapsed .acts,
+.card.collapsed footer { display: none; }
+.card.collapsed { height: auto; }

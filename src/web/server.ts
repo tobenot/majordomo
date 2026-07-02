@@ -3,29 +3,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { WebSocket } from "ws";
 import { createLogger } from "../core/logger";
+import { resolvePublicDir, browserWsUrlFor, concreteWsUrlFor, readAsset } from "./staticAssets";
 
 const log = createLogger("web");
-
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-};
-
-/** 解析静态资源目录：优先 dist/web/public（构建产物），回退 src/web/public（开发期）。 */
-function resolvePublicDir(): string {
-  const candidates = [
-    path.resolve(__dirname, "public"),
-    path.resolve(__dirname, "../../src/web/public"),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(path.join(c, "index.html"))) return c;
-  }
-  return candidates[0];
-}
 
 /**
  * Web 面板静态服务。页面本身直接连 core daemon 的 WebSocket（看同一份状态）。
@@ -72,41 +52,14 @@ async function handleRequest(
   }
 
   if (urlPath === "/") urlPath = "/index.html";
-  const filePath = path.join(publicDir, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ""));
-
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("404 Not Found");
-      return;
-    }
-    const ext = path.extname(filePath).toLowerCase();
-    let body: Buffer | string = data;
-    if (ext === ".html") {
-      body = data.toString("utf8").replace(/\{\{WS_URL\}\}/g, browserWsUrl);
-    }
-    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
-    res.end(body);
-  });
-}
-
-function browserWsUrlFor(host: string, port: number): string {
-  const normalized = host.toLowerCase().trim();
-  if (
-    normalized === "0.0.0.0" ||
-    normalized === "::" ||
-    normalized === "127.0.0.1" ||
-    normalized === "localhost" ||
-    normalized === "::1"
-  ) {
-    return `__AUTO_WS__:${port}`;
+  const asset = readAsset(publicDir, urlPath, browserWsUrl);
+  if (!asset) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("404 Not Found");
+    return;
   }
-  return `ws://${host}:${port}`;
-}
-
-function concreteWsUrlFor(host: string, port: number): string {
-  const connectHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
-  return `ws://${connectHost}:${port}`;
+  res.writeHead(200, { "Content-Type": asset.contentType });
+  res.end(asset.body);
 }
 
 function canConnectWs(url: string, timeoutMs: number): Promise<boolean> {

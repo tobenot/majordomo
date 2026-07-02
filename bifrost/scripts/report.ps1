@@ -31,6 +31,7 @@ $cfg = @{
     maxTextLen     = 4000
     notifyStop     = 'full'   # beep | full | none
     notifyNotify   = 'full'   # full | beep | none
+    popup          = 'web'    # web | winforms | none  (see Invoke-FullNotify)
 }
 $cfgPath = Join-Path $root 'report.config.jsonc'
 if (Test-Path $cfgPath) {
@@ -41,7 +42,7 @@ if (Test-Path $cfgPath) {
         $rawCfg = [regex]::Replace($rawCfg, '(?m)^\s*//.*$', '')
         $rawCfg = [regex]::Replace($rawCfg, '//[^"\r\n]*$', '', 'Multiline')
         $parsed = $rawCfg | ConvertFrom-Json
-        foreach ($k in @('ingestUrl','timeoutSec','probeMs','maxTextLen','notifyStop','notifyNotify')) {
+        foreach ($k in @('ingestUrl','timeoutSec','probeMs','maxTextLen','notifyStop','notifyNotify','popup')) {
             if ($null -ne $parsed.$k) { $cfg[$k] = $parsed.$k }
         }
     } catch { }
@@ -203,8 +204,9 @@ function Invoke-Beep {
     try { [Console]::Beep(880, 140) } catch { }
 }
 
-function Invoke-FullNotify {
-    param([string]$message)
+# Fire the WinForms toolkit popup (the legacy rich popup) plus its sound/flash/TTS chain.
+function Invoke-WinFormsNotify {
+    param([string]$message, [switch]$NoPopup)
     $notifier = Join-Path $PSScriptRoot 'notify-done.ps1'
     if (-not (Test-Path $notifier)) { Invoke-Beep; return }
     try {
@@ -212,11 +214,55 @@ function Invoke-FullNotify {
         # -Worker: skip notify-done's launcher self-respawn. We already detach it via
         # Start-Process, so the worker running inline here costs one fewer PS cold-start
         # before the popup appears -- that hop was the popup lagging behind approval.
-        Start-Process powershell.exe -ArgumentList @(
+        $al = @(
             '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden',
             '-File', "`"$notifier`"", '-Worker', '-Message', "`"$escaped`""
-        ) -WindowStyle Hidden | Out-Null
+        )
+        if ($NoPopup) { $al += '-NoPopup' }  # web popup owns the visual; reuse only sound/flash/TTS
+        Start-Process powershell.exe -ArgumentList $al -WindowStyle Hidden | Out-Null
     } catch { Invoke-Beep }
+}
+
+# Ensure the web (Edge app-mode) popup is alive + pinned. NON-BLOCKING: the launcher
+# is spawned detached (its cold-start pin-poll must never stall the turn). Returns
+# $true if Edge exists (web popup is in play), $false if absent (caller falls back).
+function Ensure-WebPopup {
+    $launcher = Join-Path $PSScriptRoot 'popup-web.ps1'
+    if (-not (Test-Path $launcher)) { return $false }
+    # Fast inline Edge-presence probe: cheap path tests, no process spawn. Drives the
+    # fallback decision without waiting on the detached launcher.
+    $edge = $null
+    $cands = @(
+        (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe')
+    )
+    foreach ($c in $cands) { if ($c -and (Test-Path $c)) { $edge = $c; break } }
+    if (-not $edge) { return $false }
+    try {
+        $ingest = [Uri]$cfg.ingestUrl
+        $popupUrl = "$($ingest.Scheme)://$($ingest.Authority)/popup.html"
+        Start-Process powershell.exe -ArgumentList @(
+            '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden',
+            '-File', "`"$launcher`"", '-Url', "`"$popupUrl`""
+        ) -WindowStyle Hidden | Out-Null
+    } catch { }
+    return $true
+}
+
+# Rich local notification. popup=web -> Edge app window owns the visual, notify-done
+# supplies sound/flash/TTS only; falls back to the WinForms popup if Edge is missing.
+# popup=winforms -> the legacy rich WinForms popup. popup=none -> sound chain only.
+function Invoke-FullNotify {
+    param([string]$message)
+    switch ([string]$cfg.popup) {
+        'none' { Invoke-WinFormsNotify $message -NoPopup; return }
+        'winforms' { Invoke-WinFormsNotify $message; return }
+        default {
+            # 'web' (default)
+            if (Ensure-WebPopup) { Invoke-WinFormsNotify $message -NoPopup }
+            else { Invoke-WinFormsNotify $message }  # no Edge -> legacy popup
+        }
+    }
 }
 
 $title = Get-Title

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>majordomo-popup</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="card" class="card collapsed">
+      <!-- 头部：拖拽区 + 项目名 + 时间 + 收起/关闭 -->
+      <header id="head">
+        <span class="logo">⌘</span>
+        <span class="proj" id="proj">majordomo</span>
+        <span class="spacer"></span>
+        <span class="time" id="time"></span>
+        <span class="conn" id="conn" title="与中枢的连接"></span>
+      </header>
+
+      <!-- persona 全文（markdown 渲染） -->
+      <section class="persona" id="personaWrap">
+        <div class="who" id="who">中枢</div>
+        <div class="body" id="persona"></div>
+      </section>
+
+      <!-- 本轮活动 mini 流 -->
+      <section class="acts" id="actsWrap">
+        <div class="acts-head">本轮活动</div>
+        <div id="acts"></div>
+      </section>
+
+      <!-- 底部按钮 -->
+      <footer>
+        <button id="btnOk" class="primary">知道了</button>
+        <button id="btnMute">静音 10 分钟</button>
+        <button id="btnCopy">复制</button>
+      </footer>
+    </div>
+
+    <script>
+      window.__WS_URL__ = "{{WS_URL}}";
+    </script>
+    <script src="popup.js"></script>
+  </body>
+</html>

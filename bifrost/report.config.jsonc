@@ -22,5 +22,13 @@
   "notifyStop": "full",
   // Notification = the window actually needs you -> the full alarm belongs here.
   //   full | beep | none
-  "notifyNotify": "full"
+  "notifyNotify": "full",
+
+  // How the "full" visual popup is rendered:
+  //   web      -> chromeless Edge app-mode window on the daemon-served /popup page
+  //               (rich markdown, self-updating, always-on-top). Auto-falls back to
+  //               winforms if Edge is not installed.
+  //   winforms -> the legacy hand-drawn WinForms popup (notify-popup.ps1).
+  //   none     -> no visual popup; sound/flash/TTS only.
+  "popup": "web"
 }
