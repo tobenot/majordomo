@@ -172,9 +172,12 @@ function Invoke-FullNotify {
     if (-not (Test-Path $notifier)) { Invoke-Beep; return }
     try {
         $escaped = $message -replace '"', '\"'
+        # -Worker: skip notify-done's launcher self-respawn. We already detach it via
+        # Start-Process, so the worker running inline here costs one fewer PS cold-start
+        # before the popup appears -- that hop was the popup lagging behind approval.
         Start-Process powershell.exe -ArgumentList @(
             '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden',
-            '-File', "`"$notifier`"", '-Message', "`"$escaped`""
+            '-File', "`"$notifier`"", '-Worker', '-Message', "`"$escaped`""
         ) -WindowStyle Hidden | Out-Null
     } catch { Invoke-Beep }
 }

@@ -64,7 +64,31 @@ if (-not $Worker) {
 # worker 模式：执行提醒逻辑
 # =============================
 
-# --- Step 1: 科幻远方警报提示音 (使用缓存WAV，后台异步播放) ---
+# --- Step 1: 持久浮窗提醒（最慢的一环，最先拉起，让它并行编译/渲染） ---
+# 人为决定：浮窗子进程要冷启动 PowerShell + Add-Type WinForms + 建复杂窗体，是整条链里
+# 最慢的一步。放最前面用非阻塞 Start-Process 拉起，它就能和下面的提示音/闪烁并行，
+# 而不是排在提示音和一次 C# 编译之后——那正是「弹窗比提示音晚」的原因。
+if (-not $NoPopup) {
+    try {
+        $popupScript = Join-Path $PSScriptRoot "notify-popup.ps1"
+        if (Test-Path $popupScript) {
+            $escapedMessage = $Message -replace '"', '\"'
+            Start-Process powershell.exe -ArgumentList @(
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-WindowStyle", "Hidden",
+                "-File", "`"$popupScript`"",
+                "-Message", "`"$escapedMessage`""
+            ) -WindowStyle Hidden | Out-Null
+        } else {
+            Write-Host "[浮窗脚本未找到] $popupScript"
+        }
+    } catch {
+        Write-Host "[浮窗启动失败] $($_.Exception.Message)"
+    }
+}
+
+# --- Step 2: 科幻远方警报提示音 (使用缓存WAV，后台异步播放) ---
 if (-not $NoBeep) {
     try {
         $cachedWav = Join-Path $PSScriptRoot "cache\alert-tone.wav"
@@ -101,7 +125,7 @@ if (-not $NoBeep) {
     }
 }
 
-# --- Step 2: Flash taskbar window ---
+# --- Step 3: Flash taskbar window ---
 try {
     $flashCode = @"
 using System;
@@ -128,27 +152,6 @@ public class TaskbarFlash {
     [TaskbarFlash]::Flash()
 } catch {
     # Best-effort
-}
-
-# --- Step 3: 持久浮窗提醒（独立子进程，先于 TTS 启动以同时出现） ---
-if (-not $NoPopup) {
-    try {
-        $popupScript = Join-Path $PSScriptRoot "notify-popup.ps1"
-        if (Test-Path $popupScript) {
-            $escapedMessage = $Message -replace '"', '\"'
-            Start-Process powershell.exe -ArgumentList @(
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-WindowStyle", "Hidden",
-                "-File", "`"$popupScript`"",
-                "-Message", "`"$escapedMessage`""
-            ) -WindowStyle Hidden | Out-Null
-        } else {
-            Write-Host "[浮窗脚本未找到] $popupScript"
-        }
-    } catch {
-        Write-Host "[浮窗启动失败] $($_.Exception.Message)"
-    }
 }
 
 # --- Step 4: TTS 双语语音播报（非阻塞，后台子进程播放，延迟确保提示音先播完） ---
