@@ -1,0 +1,5 @@
+# 探针实测产物，不进仓
+dump.jsonl
+# 未来正式版的离线缓存
+cache/
+*.offline.jsonl
