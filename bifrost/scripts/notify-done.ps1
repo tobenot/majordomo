@@ -64,6 +64,22 @@ if (-not $Worker) {
 # worker 模式：执行提醒逻辑
 # =============================
 
+# 提示音互斥：Bifrost 的 report.ps1 与 Hub 的 PowershellNotifier 可能在同一回合内
+# 相隔毫秒各拉一次 notify-done，两声警报叠着响。用 $TEMP 下一个共享锁去重：
+# 锁文件 < 2 秒 = 刚有人响过，本次静音；否则盖时间戳并放行。跨进程 best-effort，
+# 竞态窗口只有毫秒级，最坏退回「偶尔两声」——也就是现状，只增不减。
+function Test-BeepLock {
+    $lock = Join-Path $env:TEMP 'majordomo-beep.lock'
+    try {
+        if (Test-Path $lock) {
+            $age = ([DateTime]::UtcNow - (Get-Item $lock).LastWriteTimeUtc).TotalMilliseconds
+            if ($age -lt 2000) { return $false }
+        }
+        Set-Content -Path $lock -Value ([DateTime]::UtcNow.Ticks) -Encoding ASCII
+    } catch { }
+    return $true
+}
+
 # --- Step 1: 持久浮窗提醒（最慢的一环，最先拉起，让它并行编译/渲染） ---
 # 人为决定：浮窗子进程要冷启动 PowerShell + Add-Type WinForms + 建复杂窗体，是整条链里
 # 最慢的一步。放最前面用非阻塞 Start-Process 拉起，它就能和下面的提示音/闪烁并行，
@@ -89,7 +105,7 @@ if (-not $NoPopup) {
 }
 
 # --- Step 2: 科幻远方警报提示音 (使用缓存WAV，后台异步播放) ---
-if (-not $NoBeep) {
+if (-not $NoBeep -and (Test-BeepLock)) {
     try {
         $cachedWav = Join-Path $PSScriptRoot "cache\alert-tone.wav"
         if (-not (Test-Path $cachedWav)) {

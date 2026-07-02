@@ -29,7 +29,7 @@ $cfg = @{
     timeoutSec     = 2
     probeMs        = 200      # TCP reachability precheck before the POST (see Test-HubReachable)
     maxTextLen     = 4000
-    notifyStop     = 'beep'   # beep | full | none
+    notifyStop     = 'full'   # beep | full | none
     notifyNotify   = 'full'   # full | beep | none
 }
 $cfgPath = Join-Path $root 'report.config.jsonc'
@@ -183,6 +183,22 @@ function Get-Title {
     return Split-Path -Leaf $envelope.cwd
 }
 
+# First sentence of the AI's last message, for the Stop popup headline. The rich
+# Chinese report is still the hub's job; this is just enough to glance and know
+# WHICH turn ended without alt-tabbing. Cap length so the toolkit popup stays tidy.
+# Char class is built from code points (U+3002 / U+FF01 / U+FF1F = the CJK
+# sentence enders) so this source stays pure ASCII -- see the file header.
+function Get-FirstSentence {
+    param([string]$s)
+    if ([string]::IsNullOrWhiteSpace($s)) { return '' }
+    $flat = ($s -replace '\s+', ' ').Trim()
+    $enders = [string]([char]0x3002) + [char]0xFF01 + [char]0xFF1F
+    $cut = [regex]::Split($flat, "[$enders.!?\n]")[0]
+    if ([string]::IsNullOrWhiteSpace($cut)) { $cut = $flat }
+    if ($cut.Length -gt 60) { $cut = $cut.Substring(0, 60) + '...' }
+    return $cut
+}
+
 function Invoke-Beep {
     try { [Console]::Beep(880, 140) } catch { }
 }
@@ -207,7 +223,11 @@ $title = Get-Title
 switch ($mappedEvent) {
     'stop' {
         switch ($cfg.notifyStop) {
-            'full' { Invoke-FullNotify "$title done" }
+            'full' {
+                $line = Get-FirstSentence ([string]$payload.text)
+                if ([string]::IsNullOrWhiteSpace($line)) { $line = 'done' }
+                Invoke-FullNotify "$title | $line"
+            }
             'beep' { Invoke-Beep }
             default { }
         }

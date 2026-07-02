@@ -168,6 +168,8 @@ export class HubService {
       this.windows.setPersona(w.windowId, text);
       this.broadcast({ type: "window_persona", windowId: w.windowId, text });
       void this.notifier.notify(`[${w.title}] ${text}`);
+      // 链路诊断：确认 persona→notifier 真的走通（跑真窗口时看这行判断弹窗是否该弹）
+      log.info(`persona 复命 → notifier [${w.title}]: ${summarize(text)}`);
     } catch (e) {
       log.warn(`persona 复命失败（窗口 ${w.title}）: ${(e as Error).message}`);
     }
