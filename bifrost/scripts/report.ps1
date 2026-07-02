@@ -149,13 +149,14 @@ function Drain-Offline {
     } catch { }
 }
 
-$sent = $false
-try { Send-Ingest $json; $sent = $true } catch { $sent = $false }
-if ($sent) { Drain-Offline } else { Cache-Offline $json }
-
 # ---------------------------------------------------------------------------
 # Local side effect (Windows). Stop -> gentle beep; Notification -> full toolkit.
 # Local signal means "you are at the machine"; the rich Chinese report is the hub's job.
+#
+# 人为决定：本地副作用（弹窗/提示音）必须排在 hub 上报之前。上报是同步 POST，
+# hub 一挂就要干等 timeoutSec 秒超时——那 2 秒会把弹窗整体推后，正是「弹窗慢半拍」
+# 的真凶。弹窗/提示音本就是 Start-Process 非阻塞拉起，先发它零成本；上报是 best-effort，
+# 晚几秒无人等。脚本头写着 "Never blocks the window"，顺序必须兑现这句话。
 # ---------------------------------------------------------------------------
 function Get-Title {
     if ([string]::IsNullOrWhiteSpace($envelope.cwd)) { return 'majordomo' }
@@ -202,5 +203,13 @@ switch ($mappedEvent) {
     }
     default { }
 }
+
+# ---------------------------------------------------------------------------
+# Report to hub LAST. best-effort; a dead hub costs a timeoutSec-second wait that
+# must never sit in front of the popup. Success -> drain backlog; failure -> cache.
+# ---------------------------------------------------------------------------
+$sent = $false
+try { Send-Ingest $json; $sent = $true } catch { $sent = $false }
+if ($sent) { Drain-Offline } else { Cache-Offline $json }
 
 exit 0
