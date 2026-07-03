@@ -41,10 +41,28 @@ class JsonArrayStore<T> {
     }
   }
 
+  /** 加载后淘汰陈旧死数据（自愈：系统自己收敛状态，不无限增长）。删了才落库。 */
+  protected prune(shouldRemove: (v: T) => boolean): void {
+    let removed = 0;
+    for (const [k, v] of this.map) {
+      if (shouldRemove(v)) {
+        this.map.delete(k);
+        removed++;
+      }
+    }
+    if (removed) {
+      log.debug(`${this.file} 淘汰 ${removed} 条陈旧记录`);
+      this.persist();
+    }
+  }
+
   all(): T[] {
     return [...this.map.values()];
   }
 }
+
+/** 陈旧记录淘汰阈值：死数据（offline 窗口 / done 待办 / resolved 验收）超此时长在加载时清理。 */
+const PRUNE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ACTIVITY_KEEP = 30;
 
@@ -52,6 +70,8 @@ const ACTIVITY_KEEP = 30;
 export class WindowRegistry extends JsonArrayStore<WindowInfo> {
   constructor() {
     super("windows", (w) => w.windowId);
+    // offline 且超过阈值未更新的死窗口清掉。
+    this.prune((w) => w.state === "offline" && Date.now() - w.updatedAt > PRUNE_MS);
   }
 
   get(windowId: string): WindowInfo | undefined {
@@ -116,6 +136,8 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
 export class TodoStore extends JsonArrayStore<TodoItem> {
   constructor() {
     super("todos", (t) => t.id);
+    // done 且勾销超过阈值的待办清掉；open 的永远留着。
+    this.prune((t) => t.status === "done" && !!t.doneAt && Date.now() - t.doneAt > PRUNE_MS);
   }
 
   list(): TodoItem[] {
@@ -170,6 +192,8 @@ export class TodoStore extends JsonArrayStore<TodoItem> {
 export class AcceptanceStore extends JsonArrayStore<AcceptanceItem> {
   constructor() {
     super("acceptance", (a) => a.id);
+    // resolved 且超过阈值的验收项清掉；pending 的永远留着。
+    this.prune((a) => a.status === "resolved" && !!a.resolvedAt && Date.now() - a.resolvedAt > PRUNE_MS);
   }
 
   list(): AcceptanceItem[] {
@@ -188,6 +212,25 @@ export class AcceptanceStore extends JsonArrayStore<AcceptanceItem> {
     this.map.set(item.id, item);
     this.persist();
     return item;
+  }
+
+  /**
+   * 去重新增：同一窗口若已有 pending 项，就刷新它（what/kind/时间），不再堆一条。
+   * 否则新增。防止一个窗口反复 notification 把待验收表刷屏。有 windowId 才去重。
+   */
+  addUnique(opts: { windowId?: string; what: string; kind: AcceptanceItem["kind"] }): AcceptanceItem {
+    if (opts.windowId) {
+      for (const a of this.map.values()) {
+        if (a.windowId === opts.windowId && a.status === "pending") {
+          a.what = opts.what;
+          a.kind = opts.kind;
+          a.createdAt = Date.now();
+          this.persist();
+          return a;
+        }
+      }
+    }
+    return this.add(opts);
   }
 
   resolve(id: string): AcceptanceItem | undefined {

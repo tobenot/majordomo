@@ -72,7 +72,10 @@ export const DEFAULT_CONFIG: Config = {
   permissionMode: "auto",
   worker: { engine: "auto", timeoutMs: 10 * 60 * 1000 },
   persona: { mode: "auto", name: "指挥官", style: "cat-girl-maid" },
-  notifiers: ["powershell", "console"],
+  // 转型后本机弹窗/提示音归 Bifrost（窗口侧，你在场时即时反馈）；中枢的通知出口是
+  // 「你离场时」的 Bark。默认不含 powershell —— 否则同机每回合会与 Bifrost 叠一次弹窗
+  // （声音有 majordomo-beep.lock 互斥，视觉弹窗无跨进程互斥，会真叠）。要手机推送就加 "bark"。
+  notifiers: ["console"],
   diaryDir: ".codebuddy/memory",
   hub: { ingestPath: "/ingest", personaThrottleMs: 15000 },
 };

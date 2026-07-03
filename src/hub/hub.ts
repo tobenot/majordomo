@@ -85,14 +85,19 @@ export class HubService {
 
       case "notification": {
         const msg = (p.text ?? "").trim();
+        const nType = p.notificationType ?? "";
+        // idle_prompt = 窗口只是闲着等你输入，不是「待验收事项」，更不该炸手机。
+        // 只有真正需你介入的（permission / 其它非 idle 通知）才进待验收 + 推 Bark。
+        const isIdle = nType.includes("idle");
         const w = this.windows.record({
           windowId: env.windowId, cwd, event: env.event,
-          state: "waiting", summary: msg || "等待你介入",
+          state: "waiting", summary: msg || (isIdle ? "空闲等待输入" : "等待你介入"),
         });
         this.pushWindow(w);
-        // 窗口等你 = 需你介入 → 记一条待验收。
-        const isPermission = (p.notificationType ?? "").includes("permission");
-        const acc = this.acceptance.add({
+        if (isIdle) break;
+        // 窗口等你 = 需你介入 → 记一条待验收（按窗口去重，反复通知不堆叠）。
+        const isPermission = nType.includes("permission");
+        const acc = this.acceptance.addUnique({
           windowId: env.windowId,
           what: `${w.title}: ${msg || "窗口等待你"}`,
           kind: isPermission ? "permission" : "review",
