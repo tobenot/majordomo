@@ -21,8 +21,13 @@ type QueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; option
 /**
  * Claude Agent SDK 工作层。
  *
- * 正式路径使用 streaming input：每个 SdkWorker 持有一个活着的 query()，
- * 多轮输入通过 AsyncIterable 队列送入同一底层 session。`--resume` 只作为崩溃恢复兜底。
+ * @deprecated 非主路径（2026-07-02 转型后）。majordomo 现在旁观原生 Claude Code 窗口，
+ * 不再自建工作层——原生窗口的交互干不过它自己（见 docs/design/pivot-to-hub.md）。
+ * **保留不删**：TUI 仍可用它驱动单会话验收 core→persona→notify 链，且远程场景（中枢托管
+ * 会话）以后可能复用这套常驻会话能力。日常干活请用原生窗口 + Bifrost 上报。
+ *
+ * 实现：streaming input——每个 SdkWorker 持有一个活着的 query()，多轮输入通过
+ * AsyncIterable 队列送入同一底层 session。`--resume` 只作为崩溃恢复兜底。
  */
 export class SdkWorker extends WorkerEngine {
   readonly engineName = "sdk";

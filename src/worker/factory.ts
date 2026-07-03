@@ -12,6 +12,9 @@ export type EngineChoice = "auto" | "sdk" | "mock";
  * - mock → 始终回显
  * - sdk  → 强制使用 @anthropic-ai/claude-agent-sdk（未安装则降级 mock）
  * - auto → SDK 包可解析则 SDK；否则 mock
+ *
+ * 注意：工作层自 2026-07-02 起为**非主路径**（见 {@link SdkWorker}）。主产品是旁观原生
+ * 窗口的中枢，这里选出的引擎只服务「TUI 驱动单会话」这条可选/验收路径。
  */
 export function createWorker(choice: EngineChoice, opts: WorkerStartOptions): WorkerEngine {
   if (choice === "mock") return new MockWorker(opts);
