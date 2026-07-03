@@ -1,115 +1,128 @@
 # majordomo 架构
 
-> 代号「指挥官」。一个有人设前端的 Claude Code 多会话调度器。
-> 设计来源见 `docs/design/main-mind.md`，本文是落地后的架构说明。
+> 代号「指挥官」。一个旁观 N 个原生 Claude Code 窗口的人设管家中枢。
+> 设计脉络见 `docs/design/main-mind.md` → `pivot-to-hub.md`；中枢 v1 施工见 `bifrost-hub-v1.md`。本文是落地后的架构说明。
 
 ## 核心思路
 
-不包真实 TUI、不做屏幕抓取。工作层（Claude Code）全程无头，吐结构化数据；
-指挥官站在你和工作层之间，是一个有状态的中间人，自己拥有前端（TUI / Web）。
+majordomo **不驱动工作层**。真正干活的是你手边一群**原生 Claude Code 窗口**（本地或服务器）——
+它们的交互体验持续跟着官方迭代，自建工作层追不上。majordomo 只做插件天花板做不到的两件事：
 
-三层分工：
+1. **跨窗口的 persona 复命**：同时读 N 个窗口的报告，合成**一句管家汇报**（「少爷，3 号重构好了；5 号卡在权限等您点头」）。单窗口 hook 没有跨窗口视野。
+2. **常驻中枢 + 全局待办 + 多前端查岗**：一个长驻进程维护跨窗口状态，让你从终端 / 网页 / 手机连同一份状态。
 
-- **人设层（嘴）**：便宜模型 / 离线模板。读工作层输出，用人话向你汇报，负责日记 / 通知。无 agent 能力。
-- **工作层（手）**：Claude Code，连续 session，干活。
-- **文档层**：按需另开独立 session（后续迭代，写图形化验收文档）。
-
-core 与前端从第一天就分离：core 是长驻 daemon，TUI / Web / 未来远程都是它的客户端，
-通过 WebSocket 连同一份状态。这让「远程接入 / 推手机 / 公告板」成为自然延伸，而非重写。
+每个窗口装 **Bifrost 插件**，用 hook 把工作报告 `POST` 给中枢（单向、零中枢依赖）。中枢维护三张表，
+persona 复命，通过面板广播 + Bark 触达你。core 从第一天就是长驻 daemon，前端都是它的客户端——
+这让「headless 跑服务器 / 推手机 / 网页查岗」成为自然延伸。
 
 ## 模块图
 
 ```mermaid
-graph TD
-  subgraph Clients["前端（core 的客户端，看同一份状态）"]
-    TUI["TUI 客户端<br/>readline 交互"]
-    WEB["Web 面板<br/>会话列表 / 对话 / profile / 立绘位"]
-    REMOTE["未来：远程 / 手机"]
+graph TB
+  subgraph Workers["干活层：原生 Claude Code 窗口 ×N（不归中枢管）"]
+    W1["窗口 1"]
+    W2["窗口 2"]
+    WN["… 窗口 N"]
   end
 
-  subgraph Core["指挥官 core daemon（长驻）"]
-    WS["WebSocket 服务<br/>协议分发"]
-    SM["SessionManager<br/>会话池 / 创建 / 续接"]
-    SESS["Session<br/>单会话生命周期编排"]
-    STORE["Store<br/>会话元信息 + 历史持久化"]
-    CFG["Config + Profile<br/>claude/internal/tclaude 切换"]
+  RB["Bifrost 插件<br/>装进每个窗口<br/>Stop/Notification hook → POST /ingest"]
+  W1 --- RB
+  W2 --- RB
+  WN --- RB
+
+  subgraph Core["majordomo 中枢 core daemon（长驻，可 headless）"]
+    HTTP["HTTP /ingest<br/>+ WebSocket（共用端口 4350）"]
+    HUB["HubService<br/>ingest → 更新三张表 → 复命/广播"]
+    subgraph Tables["三张表（JSON 落盘 + 陈旧淘汰）"]
+      REG["WindowRegistry<br/>每窗口在做什么"]
+      TODO["TodoStore<br/>全局待办（taskId 确定性增删）"]
+      ACC["AcceptanceStore<br/>待验收（去重）"]
+    end
+    HTTP --> HUB
+    HUB --> REG
+    HUB --> TODO
+    HUB --> ACC
   end
 
-  subgraph Worker["工作层（每会话一个）"]
-    MOCK["MockWorker<br/>回显，开箱即跑"]
-    SDK["SdkWorker<br/>@anthropic-ai/claude-agent-sdk<br/>常驻 streaming input"]
-    NOTE["无 CLI fallback<br/>SDK 不可用时只进 mock"]
-  end
-
-  subgraph Persona["人设层（嘴）"]
-    API["ApiPersona<br/>OpenAI-compatible / Anthropic Messages"]
+  subgraph Persona["人设层（嘴，核心）"]
+    API["ApiPersona<br/>OpenAI-compatible / Anthropic"]
     TPL["TemplatePersona<br/>离线模板降级"]
   end
 
-
-  subgraph Notify["可插拔通知器"]
-    PS["PowershellNotifier<br/>提示音/浮窗/TTS"]
-    CON["ConsoleNotifier<br/>跨平台降级"]
-    DIARY["Diary<br/>Node 原生增量日记"]
+  subgraph Reach["触达你"]
+    BARK["BarkNotifier<br/>你离场 → 推手机（节流）"]
+    PANEL["Web / TUI 面板<br/>看三张表 + 交接浮窗"]
+    LOCAL["Bifrost 本机弹窗/提示音<br/>你在场 → 即时"]
   end
 
-  TUI <-->|JSON 消息| WS
-  WEB <-->|JSON 消息| WS
-  REMOTE -.未来.-> WS
-
-  WS --> SM
-  SM --> SESS
-  SM --> STORE
-  SM --> CFG
-  SESS --> Worker
-  SESS --> Persona
-  SESS -->|persona 汇报完成| Notify
+  RB -->|工作报告| HTTP
+  RB -.本机你在场.-> LOCAL
+  HUB -->|每窗口节流| Persona
+  Persona -->|管家汇报| BARK
+  HUB -->|WebSocket 广播| PANEL
+  PANEL -.v1 只读 / 未来插话.-> Workers
 ```
 
-## 一轮对话的数据流
+## 一次上报的数据流
 
 ```mermaid
 sequenceDiagram
-  participant U as 你（前端）
-  participant C as core / Session
-  participant W as 工作层
+  participant W as 原生 CC 窗口
+  participant B as Bifrost 插件
+  participant H as 中枢 HubService
   participant P as 人设层
-  participant N as 通知 + 日记
+  participant Y as 你（面板 / 手机）
 
-  U->>C: user_input
-  C->>W: worker.send（输入进 SDK 队列）
-  W-->>C: 流式 text 事件（结构化）
-  C-->>U: worker_message（原始，可看）
-  opt 高危操作
-    W-->>C: permission（请求批准）
-    C-->>U: permission_request
-    U->>C: permission_response (y/n)
-    C->>W: resolvePermission
+  W->>B: Stop / Notification hook 触发
+  B->>B: 本机弹窗/提示音（你在场，排在上报前）
+  B->>H: POST /ingest（工作报告 envelope）
+  H->>H: 按 event 更新三张表
+  H-->>Y: WebSocket 广播（面板即时刷新）
+  alt 新鲜事件（非离线积压 / 非节流内）
+    H->>P: reportPersona(N 窗口报告)
+    P-->>H: 一句管家汇报
+    H-->>Y: persona_message → 浮窗 + Bark（你离场）
+  else stale / 节流内
+    H->>H: 只录表，不烧 persona / 不推 Bark
   end
-  W-->>C: done（回合结束）
-  C->>P: report(userText, workerText)
-  P-->>C: 人话汇报（人设口吻）
-  C-->>U: persona_message
-  C->>N: notify + 增量日记
 ```
+
+## 三张表
+
+| 表 | 文件 | 更新方式 | 淘汰 |
+|---|---|---|---|
+| **WindowRegistry** 每窗口在做什么 | `hub-windows.json` | state 由事件推导 | offline 超 7 天清 |
+| **TodoStore** 全局待办 | `hub-todos.json` | `task_created/completed` 走 taskId **确定性**增删，不烧 LLM | done 超 7 天清 |
+| **AcceptanceStore** 待验收 | `hub-acceptance.json` | `notification` 触发，按窗口去重（`idle_prompt` 不入表） | resolved 超 7 天清 |
+
+数据**单向**：窗口 → Bifrost → 中枢 → 你。v1 面板只读（展示 + 勾/删待办、标记验收），不向窗口回话。
 
 ## 关键设计取舍
 
-- **Claude Code 接入以 Agent SDK 为准**：正式包是 `@anthropic-ai/claude-agent-sdk`。主路径使用 `query({ prompt: AsyncIterable<SDKUserMessage> })` 的 streaming input 模式；这既能常驻多轮，也能把 `/compact` 这类 slash command 当普通输入送入同一 session。
-- **SDK 是唯一真实工作层**：SDK 已经提供 `canUseTool` 权限回调、`auto` 权限模式、compact boundary、session resume 等能力；不再保留 CLI fallback，避免用无状态一次性回合掩盖主工作流问题。
-- **这不是为了支持 codex**：当前产品边界仍是 Claude Code 调度器。`WorkerEngine` 抽象只是在工程上隔离真实工作层与 mock 演示层，未来如果要接其他 agent 后端可以扩展，但不是这次 SDK 可选化的设计动机。
-- **工作层两段降级**：`auto` 优先 SDK；没有 SDK 就 mock。mock 只用于无凭证环境验收 core / TUI / Web / persona / notifier 主链路，不承担真实任务。
-- **工作层会话模型 = 常驻优先**（核心决策）：SDK Worker 用 streaming input 模式的 `query()`，传入一个受控 `AsyncIterable` 队列，进程全程不退、上下文在内存。这才是灵感文档说的"真连续"。`session_id` 仍持久化，`resume` 只作为**崩溃恢复兜底**，不是日常每轮手段。
-- **`/compact` `/model` 透传在常驻 SDK 下天然生效**：作为普通用户消息喂进活着的 session 即可（SDK 官方支持 slash command 作为输入）；compact 返回 `SDKCompactBoundaryMessage`，Session 据此告知人设层。Auto-Compact 默认开启，多数时候无需手动。
-- **自测与诊断**：`doctor` 检查 Node / SDK / profile 命令 / Web 资源 / 通知脚本；`selftest` 用临时 `MAJORDOMO_HOME` 隔离端到端验证。
-- **权限走 SDK 原生 `auto` + `canUseTool`**：默认 `permissionMode: "auto"`，沿用主人日常使用习惯，由 Claude Code 的模型分类器先判断；需要人工介入时，`canUseTool` 回调触发 → Session 转 `permission_request` 给前端 → 用户应答 → resolve `{behavior:'allow'|'deny'}`。`acceptEdits` 作为可选模式保留，但不是默认。**不需要 MCP permission-prompt-tool 重桥接**。
-- **profile 切换只影响新开会话**：已跑的会话绑死启动时的 profile；`activeProfile` 是用户级偏好，profile 命令写全局配置并覆盖项目示例值。坑：内网版个人目录是 `.claude-internal` 而非 `.claude`。
-- **通知可插拔、日记走 Node 原生**：日记是人设层副作用，跨平台（Linux 服务器也能写），不绑死 PowerShell。
-- **存储先用 JSON 文件**（`~/.majordomo/`，可用 `MAJORDOMO_HOME` 覆盖）：避开 Windows native 模块编译，协议层不依赖实现，未来可换 SQLite。
+- **中枢不碰终端**：daemon 是纯 headless Node 进程，吐 HTML + WebSocket 数据；图形界面由**你的浏览器**渲染。服务器只需终端，别装桌面。
+- **Bifrost 零中枢依赖**：插件只认一个能 POST 的 URL，不 import 中枢任何代码。这让 `git subtree split` 拆独立仓零成本。
+- **上报靠 command 脚本，不纯 http**：`Stop` 事件实测直带 `last_assistant_message`（探针推翻了「必须读 transcript」），但仍走 `report.ps1` 以便本机弹窗 + 编码修正 + 离线缓存。
+- **本机弹窗排在上报之前**：同步 POST 会把弹窗推后 `timeoutSec` 秒。顺序：先本机信号，再上报。
+- **通知职责划分**（pivot 后）：本机你在场 → Bifrost 弹窗/提示音（即时、不节流）；你离场 → 中枢 Bark（节流）。默认 `notifiers` **不含 powershell**——同机会与 Bifrost 叠弹（声音有 `beep.lock` 互斥，视觉弹窗无跨进程互斥）。
+- **persona 是大脑，hook 是管道**：hook 只运输原始技术输出；合成「一句管家汇报」只有中枢里同时看 N 窗口的 persona 能做。这是 majordomo 存在的唯一理由。
+- **stale 只录表**：离线窗口重连后排空的积压事件（`ts` 超 5min）只更新表，不触发 persona / Bark，避免历史事件炸你手机。
+- **端口 4350**：HTTP `/ingest` 与 WebSocket 共用一个端口，避开 WXWork 霸占的 4317。Bifrost `ingestUrl` 必须一致。
+- **存储用 JSON 文件**（`~/.majordomo/`，可用 `MAJORDOMO_HOME` 覆盖）：避开 Windows native 模块编译，未来可换 SQLite。
+- **profile 切换只影响新开会话**：坑——内网版个人目录是 `.claude-internal` 而非 `.claude`。
+
+## 可选旧路径：自建工作层调度器（已退役，非主路径）
+
+转型前 majordomo 是「有人设前端的 Claude Code 调度器」：`SdkWorker` 持有常驻会话干活，
+`canUseTool` 回调把权限请求转给前端 UI。这套仍完整编译、TUI 仍可用它驱动单个会话，
+但**已非主路径**——原生窗口的交互干不过它自己（转型理由见 `pivot-to-hub.md`）。
+
+- **Worker 层**（`src/worker/`）：`SdkWorker`（`@anthropic-ai/claude-agent-sdk`，streaming input 常驻会话）/ `MockWorker`（回显，无凭证验收链路）。`auto` → 有 SDK 用 SDK，否则 mock；无 CLI fallback。
+- **Session 生命周期**（`src/core/session.ts`）：`user_input → worker.send → 流式 text → done → persona.report → notify`。`SessionManager` 管会话池，`Store` 持久化。
+- 保留它的价值：无需真实多窗口即可验收 core → persona → notifier 主链路。若打算彻底删除而非「保留为可选」，是另一个决策。
 
 ## 已知未做（留待后续）
 
-
-- 文档层（另开 session 写验收文档）。
-- 立绘 / CG 渲染（Web 面板已留位）。
-- 远程接入（CF Access / 推手机 notifier）——通信层已是 WebSocket，留好口子。
+- **面板反向能力**：v1 只读，未来支持从网页/手机插话或查岗任一窗口。
+- **服务器场景**：中枢跑无桌面服务器、窗口在别处时，`stale` 判定应改用「中枢**收到**的时刻」而非窗口打的 `ts`（跨机时钟偏移会误判）。`report.ps1` 的 `ts` 只用于展示。
+- **服务器窗口直达**：托管 pty + 网页终端（类 ttyd 但带管家大脑），重路径，待拍板。
+- **立绘 / CG 渲染**（Web 面板已留位）。

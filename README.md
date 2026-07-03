@@ -1,19 +1,26 @@
 # majordomo（代号：指挥官）
 
-> A persona-driven, multi-session orchestrator for Claude Code.
-> 一个有人设前端的 Claude Code 多会话调度器。
+> A persona-driven hub that watches your fleet of native Claude Code windows.
+> 一个旁观你手边一群原生 Claude Code 窗口的人设管家中枢。
 
-工作层无头干活，人设层用人话向你汇报，前端有 TUI + 带立绘位的 Web 面板。
-core daemon + 客户端分离，WebSocket 通信，为远程接入预留口子。
+你手边同时开着 N 个原生 Claude Code 窗口在干活。majordomo **不驱动它们**，而是站在旁边：
+每个窗口经 **Bifrost 插件**把工作报告推给中枢，中枢维护三张表（谁在做什么 / 全局待办 / 待验收），
+用人设口吻合成**一句管家汇报**，并在你离场时用 Bark 推手机。core daemon + 多前端，WebSocket 通信，
+可跑在无桌面服务器。
+
+> 2026-07-02 转型：早期形态是「自建工作层的调度器」（SdkWorker 常驻会话 + canUseTool 权限 UI），
+> 已退役为可选/mock —— 原生窗口的交互干不过它自己。转型脉络见 [`docs/design/pivot-to-hub.md`](docs/design/pivot-to-hub.md)。
 
 ## 设计要点
 
-- **工作层（手）**：Claude Code SDK / CLI / mock 三种引擎，连续 session，`session_id + --resume` 续接。
-- **人设层（嘴）**：便宜模型 API / 离线模板，读工作层输出后用人话汇报，负责日记 / 通知。
-- **前端**：TUI（任意终端一条命令）+ Web 面板（会话管理 / profile 切换 / 立绘位）。
-- **开箱即跑**：没装 claude、没配 API key 也能跑通整条链路（自动降级 mock + 模板）。
+- **干活层（不归我管）**：你手边的原生 Claude Code 窗口 ×N，本地或服务器。majordomo 只旁观，不代劳。
+- **运输管道**：[`bifrost/`](bifrost/) 插件装进每个窗口，用 hook（Stop / Notification）把报告 `POST /ingest` 给中枢。零中枢依赖——只认一个能 POST 的 URL。
+- **中枢（core daemon）**：接收上报 → 维护三张表 → persona 复命 → 广播给前端 + 触达你。长驻，可 headless 跑在服务器。
+- **人设层（嘴）**：便宜模型 API / 离线模板，读 N 个窗口的报告后用人话复命。majordomo 的灵魂——单窗口 hook 没有跨窗口视野，合成不了这句话。
+- **触达你**：本机你在场 → Bifrost 弹窗/提示音（即时）；你离场 → 中枢推 Bark（节流）；随时 → 终端/网页看三张表。
+- **可选旧路径**：SdkWorker（自建工作层）仍在、仍编译、TUI 仍可用它验收，但已非主路径。没装 SDK 自动降级 mock。
 
-详见 [`docs/architecture.md`](docs/architecture.md)，设计脉络见 [`docs/design/main-mind.md`](docs/design/main-mind.md)。
+详见 [`docs/architecture.md`](docs/architecture.md)；中枢 v1 施工见 [`docs/design/bifrost-hub-v1.md`](docs/design/bifrost-hub-v1.md)，设计脉络见 [`docs/design/main-mind.md`](docs/design/main-mind.md) → [`pivot-to-hub.md`](docs/design/pivot-to-hub.md)。
 
 ## 快速开始
 
@@ -23,17 +30,20 @@ npm run build
 npm run doctor
 npm run selftest
 
-# 进入 TUI（默认命令；内嵌 daemon + 进入交互）
+# 启动中枢 + 面板（默认命令；内嵌 daemon）
 node dist/cli.js
 
-# Web 面板
+# Web 面板（看三张表 + 交接浮窗）
 node dist/cli.js web
 
-# 前台运行 core daemon（长驻，供多个客户端连接）
+# 前台运行 core daemon（长驻，供窗口上报 + 多前端连接）
 node dist/cli.js daemon
 ```
 
-全局安装后可用 `commander` / `majordomo` 在任意目录唤起（对标 `claude`）：
+窗口侧：把 [`bifrost/`](bifrost/) 作为插件装进你的 Claude Code，配好 `report.config.jsonc` 的 `ingestUrl`
+指向中枢的 `POST /ingest`（与 WebSocket **共用端口 4350**，避开 WXWork 占的 4317）。装法见 [`bifrost/README.md`](bifrost/README.md)。
+
+全局安装后可用 `commander` / `majordomo` 在任意目录唤起：
 
 ```bash
 npm install -g .
@@ -57,19 +67,33 @@ PERSONA_API_FORMAT=anthropic
 PERSONA_API_BASE=https://api.anthropic.com
 PERSONA_MODEL=claude-3-5-haiku-latest
 # 官方 Anthropic 接口可省略 PERSONA_API_BASE
-
 ```
 
-### Worker 引擎
+### 通知与触达
 
+| notifier | 作用 | 场景 |
+|---|---|---|
+| `bark` | 推手机（需 `bark` 配置） | 你离场时中枢的唯一出口；服务器无桌面时也靠它 |
+| `console` | 跨平台命令行降级 | 默认，兜底 |
+| `powershell` | 本机提示音/浮窗/TTS | **默认不含**——本机弹窗归 Bifrost，中枢同机再弹会叠一次 |
+
+默认 `notifiers: ["console"]`。本机弹窗/提示音的职责已让给 Bifrost（窗口侧，你在场即时反馈）；
+中枢的通知出口是「你离场时」的 Bark。要手机推送就在配置里加 `"bark"`。
+
+### Hub（中枢）
+
+`hub.ingestPath`（默认 `/ingest`）、`hub.personaThrottleMs`（默认 15s，每窗口复命节流）。
+三张表落盘 `~/.majordomo/hub-*.json`，加载时自动淘汰陈旧死数据（offline 窗口 / done 待办 / resolved 验收超 7 天）。
+
+### Worker 引擎（可选旧路径）
 
 | engine | 作用 |
 |---|---|
 | `auto` | 优先 `@anthropic-ai/claude-agent-sdk` 常驻会话；没有 SDK 则 mock |
 | `sdk` | 强制走 TypeScript Agent SDK 常驻会话 |
-| `mock` | 回显引擎，无需任何凭证，用于验收整条链路 |
+| `mock` | 回显引擎，无需凭证，用于验收链路 |
 
-支持 `maxTurns`、`timeoutMs`、`allowedTools`、`disallowedTools`。默认 `permissionMode: "auto"`，沿用 Claude Code 的 auto 分类器；需要人工介入时由 `canUseTool` 回调转发到 TUI / Web 权限确认。`acceptEdits` 仍可作为可选模式。
+自建工作层已退役为可选，主路径是旁观原生窗口。保留它是为了 TUI 仍可直接驱动一个会话验收 core→persona→notify 链。
 
 ### Profiles（claude / claude-internal / tclaude 一键切换）
 
@@ -87,18 +111,10 @@ node dist/cli.js profile internal
 node dist/cli.js doctor
 ```
 
-## 网络调研后的 Claude Code 接入结论
-
-正式 TypeScript Agent SDK 包名是 `@anthropic-ai/claude-agent-sdk`。主路径使用 `query({ prompt: AsyncIterable<SDKUserMessage> })` 的 streaming input 模式：每个 `SdkWorker` 持有一个常驻会话，多轮输入进入同一底层 session。
-
-1. SDK Worker：`auto` 优先使用常驻 Agent SDK，会保存 `session_id`；`/compact`、`/model` 作为普通输入透传给同一个 session。
-2. 不保留 CLI fallback：主要工作流必须修好常驻 SDK；SDK 不可用时只降级到 mock，用于验收 core / TUI / Web / persona / notifier 主链路。
-
-真实权限 UI 走 SDK 原生 `canUseTool` 回调：默认 `permissionMode: "auto"`，分类器无法自动处理时才转给前端确认。
-
 ## 验收
 
 打开 [`docs/acceptance/index.html`](docs/acceptance/index.html)，保姆级步骤 + 回归测试要点。
+中枢 v1 专项验收见 [`docs/acceptance/2026-07-02-hub-v1-acceptance.html`](docs/acceptance/2026-07-02-hub-v1-acceptance.html)。
 
 ```bash
 npm run build
@@ -106,25 +122,31 @@ npm run doctor
 npm run selftest
 ```
 
-Web 面板启动后也有 `GET /healthz` 可做健康检查；返回 `web/assets/daemonWs` 三段状态，不泄露本机绝对路径。
+Web 面板启动后有 `GET /healthz` / `GET /readyz` 可做健康检查，不泄露本机绝对路径。
 
 ## Status
 
-🚧 v0.2 WIP。核心链路已跑通（TUI / Web / 会话池 / profile / 通知 / 日记 / mock + 常驻 SDK 工作层）。
-未做：文档层、立绘渲染、远程接入（架构口子已留）。
+🚧 Hub v1。核心链路已跑通：**窗口 → Bifrost → 中枢 → 三张表 → persona 复命 → 面板/Bark**。
+可选旧路径（SdkWorker / TUI 驱动单会话）仍完整编译可用。
 
 ## Roadmap
 
-- [x] core daemon + 会话池 + session_id 持久化
-- [x] worker：mock + 常驻 SDK（`session_id + resume` 崩溃恢复）
-- [x] 最小 TUI 跑通主链路（你输入 → 工作层 → 人设层汇报）
-- [x] Web 面板（会话列表 / 历史 / profile 切换 / healthz）
-- [x] 人设层（API + 离线模板）+ notifier（PowerShell / console）+ 日记
+- [x] core daemon + WebSocket + 多前端（终端 / 网页看同一份状态）
+- [x] Bifrost 插件：探针实测六事件 payload → 正式 `report.ps1` 上报
+- [x] 中枢三张表（窗口注册表 / 全局 TODO / 待验收），JSON 落盘 + 陈旧淘汰
+- [x] persona 跨窗口复命（每窗口节流）+ Bark 手机推送
+- [x] Web 交接浮窗（Edge app 常驻置顶，persona 富文本全显示）
+- [x] 通知职责划分：本机弹窗归 Bifrost，Bark 归中枢
 - [x] doctor / selftest 可验收命令
-- [x] SDK 原生 `canUseTool` 权限 UI
-- [ ] 文档层（另开 session 写验收文档）
-- [ ] 立绘 / CG
-- [ ] 远程接入（Cloudflare Access / 推手机）
+- [ ] 面板反向能力：从网页/手机插话或查岗任一窗口（v1 只读）
+- [ ] 服务器场景：中枢跑无桌面服务器 + 窗口在别处（stale 判定改用中枢收到时刻）
+- [ ] 立绘 / CG（Web 面板已留位）
+- [ ] 服务器窗口直达（托管 pty + 网页终端，重路径，待拍板）
+
+可选/退役：
+
+- [x] worker：mock + 常驻 SDK（`session_id + resume` 崩溃恢复）
+- [x] SDK 原生 `canUseTool` 权限 UI（旧调度器形态）
 
 ## License
 
