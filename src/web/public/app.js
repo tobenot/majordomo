@@ -165,7 +165,7 @@
 
     if (w.lastPersona) {
       pBox.classList.remove("hidden");
-      pBox.innerHTML = '<div class="who">' + escapeHtml(state.personaName) + "</div><div class=\"body\">" + escapeHtml(w.lastPersona) + "</div>";
+      pBox.innerHTML = '<div class="who">' + escapeHtml(state.personaName) + '</div><div class="body md">' + window.MjMarkdown.render(w.lastPersona) + "</div>";
     } else {
       pBox.classList.add("hidden");
     }

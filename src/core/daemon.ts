@@ -34,7 +34,7 @@ export class CoreDaemon {
   private clients = new Set<WebSocket>();
   private diaryDir: string;
   /** 浮窗页从 daemon 自身端口直供，连同源 WS。仅这几个白名单路径，防目录穿越。 */
-  private static readonly POPUP_ASSETS = new Set(["/popup", "/popup.html", "/popup.js", "/popup.css"]);
+  private static readonly POPUP_ASSETS = new Set(["/popup", "/popup.html", "/popup.js", "/popup.css", "/markdown.js"]);
   private popupPublicDir = resolvePublicDir();
 
   constructor(private cfg: Config, private projectRoot: string = process.cwd()) {

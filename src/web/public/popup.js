@@ -1,5 +1,7 @@
 // majordomo 交接浮窗：常驻置顶，订阅中枢 WS。任一窗口交接（stop 有 persona / notification）
-// 时把浮窗刷成"最新交接"，脉冲 + 提示音。同源 WS = daemon 自身端口（popup 页由 daemon 直供）。
+// 时把浮窗刷成"最新交接"，脉冲 + 留一道"未读"呼吸辉光直到你点知道了。同源 WS = daemon
+// 自身端口（popup 页由 daemon 直供）。提示音由 notify-done（PS）独占，浮窗不出声——
+// Edge app 全新 user-data-dir 无用户手势，WebAudio 必被 autoplay 拦，出声看运气反成噪音。
 (function () {
   "use strict";
 
@@ -24,7 +26,7 @@
     windows: {},        // windowId -> WindowInfo
     current: null,      // 当前展示的 windowId
     personaName: "中枢",
-    muteUntil: 0,       // 静音截止时间戳
+    unread: {},         // windowId -> true：交接来了但还没点"知道了"
   };
 
   var STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
@@ -95,14 +97,14 @@
     return arr[0] || null;
   }
 
-  // 把某窗口设为当前并渲染；alert=true 则脉冲 + 展开 + 响铃（除非静音）
+  // 把某窗口设为当前并渲染；alert=true 则脉冲 + 展开 + 标记未读（声音由 PS 独占）
   function focus(windowId, alert) {
     state.current = windowId;
+    if (alert) state.unread[windowId] = true;
     render();
     if (alert) {
       expand();
       pulse();
-      if (Date.now() >= state.muteUntil) chime();
     }
   }
 
@@ -114,6 +116,7 @@
       el("persona").innerHTML = '<span class="empty">等待窗口交接…</span>';
       el("acts").innerHTML = "";
       el("time").textContent = "";
+      renderMore();
       return;
     }
     el("proj").textContent = w.title || "majordomo";
@@ -121,8 +124,11 @@
     el("time").textContent = fmtTime(w.updatedAt) + " · " + (STATE_LABEL[w.state] || w.state);
     el("who").textContent = state.personaName;
 
+    // 未读呼吸辉光：交接来了但没点"知道了"就一直亮，被动置顶窗口需要一个不消失的信号
+    el("card").classList.toggle("unread", !!state.unread[state.current]);
+
     var text = w.lastPersona || w.lastText || "";
-    el("persona").innerHTML = text ? renderMarkdown(text) : '<span class="empty">（暂无交接文本）</span>';
+    el("persona").innerHTML = text ? window.MjMarkdown.render(text) : '<span class="empty">（暂无交接文本）</span>';
 
     var acts = el("acts");
     acts.innerHTML = "";
@@ -135,6 +141,37 @@
         '<span class="act-sum">' + escapeHtml(a.summary) + "</span>";
       acts.appendChild(row);
     });
+    renderMore();
+  }
+
+  // 头部"还有 N 个窗口等你"：多窗口同时交接时，只显最新那个会把其余的从视野抹掉。
+  // 统计除当前外仍未读的窗口数，点它轮换到下一个未读窗口。
+  function renderMore() {
+    var chip = el("more");
+    if (!chip) return;
+    var others = 0;
+    for (var k in state.unread) {
+      if (state.unread.hasOwnProperty(k) && state.unread[k] && k !== state.current) others++;
+    }
+    if (others > 0) {
+      chip.textContent = "+" + others;
+      chip.title = "还有 " + others + " 个窗口等你，点击切换";
+      chip.style.display = "";
+    } else {
+      chip.style.display = "none";
+    }
+  }
+
+  // 轮换到下一个未读窗口（按更新时间，环形）
+  function cycleUnread() {
+    var ids = [];
+    for (var k in state.unread) {
+      if (state.unread.hasOwnProperty(k) && state.unread[k] && k !== state.current && state.windows[k]) ids.push(k);
+    }
+    if (!ids.length) return;
+    ids.sort(function (a, b) { return state.windows[b].updatedAt - state.windows[a].updatedAt; });
+    focus(ids[0], false);
+    expand();
   }
 
   function currentPlainText() {
@@ -153,116 +190,6 @@
   function expand() { el("card").classList.remove("collapsed"); }
   function collapse() { el("card").classList.add("collapsed"); }
 
-  // 轻提示音：WebAudio 合成，不依赖资源文件。被 autoplay 策略拦截也无妨（还有 PS 声音兜底）。
-  function chime() {
-    try {
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      var ctx = new Ctx();
-      var notes = [784, 988]; // G5, B5
-      notes.forEach(function (f, i) {
-        var o = ctx.createOscillator();
-        var g = ctx.createGain();
-        o.type = "sine"; o.frequency.value = f;
-        o.connect(g); g.connect(ctx.destination);
-        var t = ctx.currentTime + i * 0.14;
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-        o.start(t); o.stop(t + 0.24);
-      });
-      setTimeout(function () { try { ctx.close(); } catch (e) {} }, 800);
-    } catch (e) { /* best-effort */ }
-  }
-
-  // ── 极简 markdown 渲染（先转义，再解析。无第三方依赖） ──
-  // 用不可打印哨兵  占位保护行内码，杜绝与正文数字撞车。
-  var SENT = String.fromCharCode(1);
-  function renderMarkdown(src) {
-    var s = escapeHtml(src); // 1) 整体 HTML 转义，杜绝注入
-    var out = [];
-    var lines = s.split(/\r?\n/);
-    var i = 0;
-    var listType = null; // "ul" | "ol" | null
-
-    function closeList() { if (listType) { out.push("</" + listType + ">"); listType = null; } }
-
-    while (i < lines.length) {
-      var line = lines[i];
-
-      // 代码块 ```
-      var fence = line.match(/^\s*```(.*)$/);
-      if (fence) {
-        closeList();
-        var buf = [];
-        i++;
-        while (i < lines.length && !/^\s*```/.test(lines[i])) { buf.push(lines[i]); i++; }
-        i++; // 跳过收尾 ```
-        out.push("<pre><code>" + buf.join("\n") + "</code></pre>");
-        continue;
-      }
-
-      // 标题 #/##/###
-      var h = line.match(/^\s*(#{1,3})\s+(.*)$/);
-      if (h) {
-        closeList();
-        var lvl = h[1].length;
-        out.push("<h" + lvl + ">" + inline(h[2]) + "</h" + lvl + ">");
-        i++; continue;
-      }
-
-      // 无序列表 - / *
-      var ul = line.match(/^\s*[-*]\s+(.*)$/);
-      if (ul) {
-        if (listType !== "ul") { closeList(); out.push("<ul>"); listType = "ul"; }
-        out.push("<li>" + inline(ul[1]) + "</li>");
-        i++; continue;
-      }
-
-      // 有序列表 1.
-      var ol = line.match(/^\s*\d+\.\s+(.*)$/);
-      if (ol) {
-        if (listType !== "ol") { closeList(); out.push("<ol>"); listType = "ol"; }
-        out.push("<li>" + inline(ol[1]) + "</li>");
-        i++; continue;
-      }
-
-      // 空行 → 段落分隔
-      if (/^\s*$/.test(line)) { closeList(); i++; continue; }
-
-      // 普通段落（相邻非空行并进一个 <p>，行内换行用 <br>）
-      closeList();
-      var para = [line];
-      i++;
-      while (i < lines.length && !/^\s*$/.test(lines[i]) &&
-             !/^\s*(#{1,3}\s|[-*]\s|\d+\.\s|```)/.test(lines[i])) {
-        para.push(lines[i]); i++;
-      }
-      out.push("<p>" + para.map(inline).join("<br>") + "</p>");
-    }
-    closeList();
-    return out.join("");
-  }
-
-  // 行内：`code` **bold** *italic* [text](url)。输入已 HTML 转义过。
-  function inline(s) {
-    var codes = [];
-    s = s.replace(/`([^`]+)`/g, function (_, c) {
-      codes.push(c);
-      return SENT + (codes.length - 1) + SENT;
-    });
-    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    s = s.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
-    // 链接 [text](http…)：url 已转义，只允许 http/https，杜绝 javascript:
-    s = s.replace(/\[([^\]]+)\]\((https?:&#x2F;&#x2F;[^\s)]+|https?:\/\/[^\s)]+)\)/g, function (_, t, u) {
-      return '<a href="' + u + '" target="_blank" rel="noopener">' + t + "</a>";
-    });
-    s = s.replace(new RegExp(SENT + "(\\d+)" + SENT, "g"), function (_, n) {
-      return "<code>" + codes[+n] + "</code>";
-    });
-    return s;
-  }
-
   // ── 工具 ────────────────────────────────────────────────
   function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }
   function escapeHtml(s) {
@@ -273,13 +200,16 @@
   function escapeAttr(s) { return escapeHtml(s).replace(/[^a-zA-Z0-9_-]/g, "_"); }
 
   // ── 按钮 ────────────────────────────────────────────────
-  el("btnOk").onclick = function () { collapse(); };
-  el("btnMute").onclick = function () {
-    state.muteUntil = Date.now() + 10 * 60 * 1000;
-    var b = el("btnMute");
-    b.textContent = "已静音";
-    setTimeout(function () { b.textContent = "静音 10 分钟"; }, 1500);
+  // "知道了"：清掉当前窗口未读 → 熄辉光。若还有别的窗口未读就轮换过去，否则收起待命。
+  el("btnOk").onclick = function () {
+    delete state.unread[state.current];
+    var pending = 0;
+    for (var k in state.unread) { if (state.unread.hasOwnProperty(k) && state.unread[k]) pending++; }
+    if (pending > 0) { cycleUnread(); }
+    else { el("card").classList.remove("unread"); collapse(); }
+    render();
   };
+  el("more").onclick = cycleUnread;
   el("btnCopy").onclick = function () {
     var text = currentPlainText();
     var done = function () {
