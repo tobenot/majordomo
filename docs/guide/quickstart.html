@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>使用指南 · majordomo 指挥官</title>
+    <style>
+      :root {
+        --bg: #0e1016; --card: #161a26; --border: #2a3042;
+        --text: #e8ebf2; --text2: #9aa3b6; --accent: #4d8dff; --accent2: #b46bff;
+        --green: #35c46a; --yellow: #e6b450; --code: #1b2030;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.7; padding: 0 0 80px;
+      }
+      header {
+        padding: 40px 24px 26px; text-align: center;
+        background: linear-gradient(160deg, #1a1f33, #11141f);
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 { margin: 0 0 8px; font-size: 28px; }
+      header h1 .accent { color: var(--accent2); }
+      header p { margin: 0; color: var(--text2); }
+      .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+      .card {
+        background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+        padding: 22px 26px; margin: 22px 0;
+      }
+      h2 { font-size: 20px; margin: 0 0 14px; display: flex; align-items: center; gap: 12px; }
+      h2 .num {
+        background: var(--accent); color: #fff; width: 30px; height: 30px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 16px; flex: 0 0 auto;
+      }
+      h3 { font-size: 15px; color: var(--accent); margin: 20px 0 8px; }
+      pre {
+        background: var(--code); border: 1px solid var(--border); border-radius: 10px;
+        padding: 14px 16px; overflow-x: auto; margin: 10px 0; font-size: 13px;
+      }
+      code { font-family: "Cascadia Code", Consolas, monospace; }
+      p code, li code, td code { background: var(--code); padding: 1px 6px; border-radius: 5px; color: var(--accent2); }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+      th, td { border: 1px solid var(--border); padding: 9px 12px; text-align: left; vertical-align: top; }
+      th { background: #1a1f30; color: var(--text2); }
+      blockquote {
+        margin: 14px 0; padding: 10px 16px; border-left: 3px solid var(--accent2);
+        background: #1a1526; color: var(--text2); border-radius: 0 8px 8px 0;
+      }
+      .lead { font-size: 15px; color: var(--text2); }
+      .tag { display: inline-block; padding: 1px 9px; border-radius: 20px; font-size: 12px; border: 1px solid var(--border); color: var(--text2); }
+      .tag.g { color: var(--green); border-color: var(--green); }
+      .tag.y { color: var(--yellow); border-color: var(--yellow); }
+      .tag.b { color: var(--accent); border-color: var(--accent); }
+      .ok { color: var(--green); } .warn { color: var(--yellow); }
+      .step-note { color: var(--text2); font-size: 14px; margin: 6px 0 0; }
+      hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+      .mermaid-lite {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+        gap: 10px; margin: 14px 0; font-size: 13px; color: var(--text2);
+      }
+      .mermaid-lite .box {
+        border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--code);
+      }
+      .mermaid-lite .arr { color: var(--accent); font-size: 18px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>majordomo <span class="accent">使用指南</span></h1>
+      <p>装中枢 · 装插件 · 日常怎么用 —— 十分钟上手</p>
+    </header>
+
+    <div class="wrap">
+      <div class="card">
+        <h2><span class="num">0</span>一句话它是什么</h2>
+        <p class="lead">
+          你手边同时开着好几个 Claude Code 窗口在干活。majordomo <b>不替你干活</b>，
+          它站在旁边当管家：每个窗口做完一轮、或卡住等你许可，都会自动上报给<b>中枢</b>，
+          中枢维护三张表（<span class="tag b">谁在做什么</span> <span class="tag">全局待办</span> <span class="tag">待验收</span>），
+          再用人设口吻把技术输出翻成人话，你离场时还能推手机。
+        </p>
+        <div class="mermaid-lite">
+          <span class="box">干活窗口 ×N<br>（装了 Bifrost 插件）</span>
+          <span class="arr">→</span>
+          <span class="box">中枢<br>三张表 + 人设复命</span>
+          <span class="arr">→</span>
+          <span class="box">你<br>网页面板 / 手机</span>
+        </div>
+        <p class="step-note">所以上手就两件事：<b>把中枢跑起来</b>，然后<b>给每个干活窗口装上 Bifrost 插件</b>。</p>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">1</span>把中枢跑起来</h2>
+        <p>在 majordomo 仓库目录里：</p>
+        <pre><code>npm install
+npm run build
+npm run doctor      # 环境自检，绿了再往下
+node dist/cli.js    # 起中枢 + Web 面板（默认命令）</code></pre>
+        <p>看到这行就是中枢就绪：</p>
+        <pre><code class="ok">core daemon 监听 http+ws://127.0.0.1:4350（上报入口 /ingest）</code></pre>
+        <h3>看面板</h3>
+        <p>浏览器打开 <code>http://127.0.0.1:4351</code>（面板端口 = 中枢端口 + 1）。
+          现在还是空的——因为还没有窗口上报。右上角应显示 <span class="ok">已连接</span>。</p>
+        <blockquote>
+          <b>端口备忘</b>：中枢用 <b>4350</b>（WebSocket 和 <code>/ingest</code> 共用），面板 <b>4351</b>。
+          用 4350 是因为 4317 被企业微信占了。
+        </blockquote>
+        <h3>想让它复命说人话（可选）</h3>
+        <p>不配也能跑（离线模板会兜底出一句猫娘口吻）。想要真人设，复制 <code>.env.example</code> 为 <code>.env</code> 填 API：</p>
+        <pre><code>PERSONA_API_FORMAT=openai        # 或 anthropic
+PERSONA_API_KEY=sk-...
+PERSONA_MODEL=gpt-4o-mini        # 便宜模型就够</code></pre>
+        <p class="step-note">填完重开中枢生效。用便宜小模型即可——它只负责把技术输出翻成人话，不干活。</p>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">2</span>给每个干活窗口装 Bifrost 插件</h2>
+        <p>这一步在你<b>真正干活</b>的 Claude Code 窗口做，<b>不是</b>中枢那个终端。启动时用 <code>--plugin-dir</code> 指到 <code>bifrost/</code>：</p>
+        <pre><code>claude --plugin-dir D:/GitRep/majordomo/bifrost</code></pre>
+        <p class="step-note">把路径换成你机器上 majordomo 仓库的 <code>bifrost</code> 目录。然后照常用这个窗口干活即可。</p>
+        <h3>装上后会发生什么</h3>
+        <table>
+          <tr><th>窗口发生的事</th><th>中枢面板的反应</th></tr>
+          <tr><td>窗口启动</td><td>左栏冒出这个窗口，状态 <span class="tag g">空闲</span></td></tr>
+          <tr><td>做完一轮回复</td><td>persona 把这轮输出翻成一句人话复命；本机弹窗+提示音</td></tr>
+          <tr><td>建了任务 / 完成任务</td><td>右栏「全局待办」自动 +1 / 自动划掉（不烧 LLM）</td></tr>
+          <tr><td>卡住等你许可</td><td>窗口转 <span class="tag y">等你</span>，进「待验收」，你离场则推手机</td></tr>
+          <tr><td><code>/exit</code> 退出</td><td>窗口变灰离线</td></tr>
+        </table>
+        <blockquote>
+          <b>三个常见坑</b>：<br>
+          ① 插件只在窗口<b>启动时</b>加载 —— 必须开<b>全新</b>窗口，旧窗口不生效。<br>
+          ② 改了插件代码热载用 <code>/reload-plugins</code>；改了 <code>plugin.json</code> 要重开窗口。<br>
+          ③ 中枢没开也不影响干活 —— 插件会把上报<b>落盘缓存</b>，下次中枢开着时自动补送。
+        </blockquote>
+        <h3>改上报地址等</h3>
+        <p>编辑 <code>bifrost/report.config.jsonc</code>。默认指 <code>http://127.0.0.1:4350/ingest</code>，
+          中枢在别的机器/端口就改这里的 <code>ingestUrl</code>（要和中枢的 <code>port</code> 对上）。</p>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">3</span>日常怎么用</h2>
+        <ul>
+          <li><b>干活照旧</b>：你还是在原生 Claude Code 窗口里正常敲。majordomo 全程旁观，不打扰。</li>
+          <li><b>面板当仪表盘</b>：晾着一个浏览器 tab（或 Edge app 浮窗）扫一眼——哪个窗口忙、哪个卡住等你、还有啥待办没清。</li>
+          <li><b>离场靠手机</b>：配了 Bark 就在你不在电脑前时把「XX 窗口卡住等你」推到手机（需在配置里加 <code>bark</code> 并加 <code>"bark"</code> 到 notifiers）。</li>
+          <li><b>面板能手动操作的</b>：加/勾/删待办、把待验收标「已处理」。这些会同步到所有连着的前端。</li>
+        </ul>
+        <blockquote>
+          <b>v1 是只读仪表盘</b>：面板<b>不能</b>对窗口发指令——卡住的窗口你还是回那个窗口本人点许可。
+          中枢的价值是「不让任何窗口的卡点被你漏掉」。「从面板插话/直达窗口」是后续版本的事。
+        </blockquote>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">4</span>不确定装好没？30 秒自测</h2>
+        <p>不用开真窗口，中枢起着，另开一个终端手动灌一条上报：</p>
+        <pre><code>curl -s -X POST http://127.0.0.1:4350/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"windowId":"TEST-1","event":"stop","cwd":"D:/demo","payload":{"text":"测试：重构完成"}}'</code></pre>
+        <p>返回 <code class="ok">{"ok":true}</code>，面板左栏立刻冒出一个 <span class="tag b">demo</span> 窗口、点开有 persona 复命 —— 说明中枢这侧通了。
+          再开真窗口挂 Bifrost，能实时跟随就全通了。</p>
+        <p class="step-note">更细的逐事件验收：<code>docs/acceptance/2026-07-02-hub-v1-acceptance.html</code>。命令行自检：<code>npm run doctor</code> / <code>npm run selftest</code>。</p>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">5</span>出问题先看这里</h2>
+        <table>
+          <tr><th>现象</th><th>处置</th></tr>
+          <tr><td>curl 连接被拒</td><td>中枢没起，或端口不对。确认 <code>config.jsonc</code> 的 <code>port</code> 和 <code>bifrost/report.config.jsonc</code> 的 <code>ingestUrl</code> 都指 4350。</td></tr>
+          <tr><td>面板空白但 curl 返回 ok</td><td>浏览器要开面板端口 <b>4351</b>（不是 4350），且右上角显示<span class="ok">已连接</span>。</td></tr>
+          <tr><td>真窗口没反应</td><td>Bifrost 只在窗口启动时加载 —— 必须开<b>全新</b>窗口。</td></tr>
+          <tr><td>复命很久才出</td><td>同窗口有节流（默认 15s），高频 Stop 会跳过。想每条都出，调小 <code>hub.personaThrottleMs</code>。</td></tr>
+          <tr><td>中文乱码</td><td>脚本读 stdin 前需 UTF-8（<code>report.ps1</code> 已内置）。若自改脚本记得设。</td></tr>
+          <tr><td>一开中枢涌进一堆旧窗口</td><td>正常，是离线缓存补送。陈旧事件（&gt;5min）只录表不复命不推送。不想要就清空 <code>bifrost/cache/ingest.offline.jsonl</code>。</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">6</span>放服务器上？先加鉴权</h2>
+        <p class="warn">⚠️ v1 只在 localhost 无鉴权。中枢一旦暴露到公网，<code>/ingest</code> 必须加 token（或放 Cloudflare Access 之类后面），
+          否则任何人都能往你的待办灌数据。本地自用无碍，公网前务必补上。</p>
+        <p class="step-note">另外服务器无桌面时本机弹窗/提示音全废，触达你的唯一出口是 Bark —— 记得配好手机推送。</p>
+      </div>
+    </div>
+  </body>
+</html>
