@@ -30,28 +30,38 @@ export function resolveCommandPath(command: string): string | null {
 export function getCommandVersion(command: string): string | null {
   const resolved = resolveCommandPath(command);
   if (!resolved) return null;
-  const r = process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved)
-    ? spawnSync("cmd.exe", ["/d", "/s", "/c", quoteForCmd([resolved, "--version"])], {
+  // win32 上 .cmd/.bat 是 shell 脚本，必须经 cmd.exe。用 shell:true + 自带引号的
+  // 整行命令（避免手工拼 cmd 串导致的二次转义 → “不是内部或外部命令”，也兼容含空格路径）。
+  const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved);
+  const r = needsShell
+    ? spawnSync(`"${resolved}" --version`, [], {
         timeout: 5000,
         stdio: "pipe",
         windowsHide: true,
+        shell: true,
       })
     : spawnSync(resolved, ["--version"], {
         timeout: 5000,
         stdio: "pipe",
         windowsHide: process.platform === "win32",
       });
-  const out = Buffer.concat([
+  const out = decodeConsole(Buffer.concat([
     r.stdout ? Buffer.from(r.stdout as any) : Buffer.alloc(0),
     r.stderr ? Buffer.from(r.stderr as any) : Buffer.alloc(0),
-  ])
-    .toString("utf8")
-    .trim();
+  ])).trim();
   return out.split("\n")[0] || "available";
 }
 
-function quoteForCmd(parts: string[]): string {
-  return parts.map((s) => `"${s.replace(/%/g, "%%").replace(/([&|<>^])/g, "^$1").replace(/"/g, '\\"')}"`).join(" ");
+/** Windows 中文控制台默认 cp936(GBK)，用 utf8 解会乱码；其他平台按 utf8。 */
+function decodeConsole(buf: Buffer): string {
+  if (process.platform === "win32") {
+    try {
+      return new TextDecoder("gbk").decode(buf);
+    } catch {
+      /* 无 ICU 时回退 utf8 */
+    }
+  }
+  return buf.toString("utf8");
 }
 
 
