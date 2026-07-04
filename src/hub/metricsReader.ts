@@ -12,7 +12,7 @@ import { createLogger } from "../core/logger";
 
 const log = createLogger("hub:metrics");
 
-// ── transcript 单行原始结构（CC transcript JSONL） ──
+// ── transcript 单行原始结构（CC transcript JSONL，实测 v2.1.154） ──
 interface TranscriptRecord {
   type?: string;
   message?: {
@@ -28,20 +28,16 @@ interface TranscriptRecord {
       type?: string;
       name?: string;
       input?: Record<string, unknown>;
-      tool_use_result?: unknown;
     }>;
   };
-  tool_use_result?: {
-    is_error?: boolean;
-    stderr?: string;
-  };
-  system?: {
-    turn_duration?: { durationMs?: number };
-  };
-  /** "ai-title" 类型的记录 */
+  /** assistant 记录上的 git 分支 */
+  gitBranch?: string;
+  /** "ai-title" 类型：会话标题 */
   title?: string;
-  /** 权限模式 */
-  permission_mode?: string;
+  /** "permission-mode" 类型：权限模式 */
+  permissionMode?: string;
+  /** assistant 记录的时间戳 */
+  timestamp?: string;
 }
 
 // ── 公开 API ─────────────────────────────────────────────────
@@ -93,6 +89,7 @@ export function readIncremental(
     const entries: AssistantEntry[] = [];
     let title = windowMeta?.aiTitle ?? "";
     let permMode = windowMeta?.permissionMode ?? "";
+    let branch = windowMeta?.gitBranch ?? "";
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -100,28 +97,32 @@ export function readIncremental(
       try {
         const rec = JSON.parse(trimmed) as TranscriptRecord;
 
-        // 采集 ai-title（用户级元记录，不是 assistant 消息）
+        // 采集 ai-title（用户级元记录）
         if (rec.type === "ai-title" && rec.title) {
           title = rec.title;
+          continue;
+        }
+
+        // 采集权限模式（独立记录类型）
+        if (rec.type === "permission-mode" && rec.permissionMode && !permMode) {
+          permMode = rec.permissionMode;
+          continue;
         }
 
         // 只处理 assistant 类型的消息
         if (rec.type !== "assistant") continue;
-        if (!rec.message?.usage) continue; // 没有 usage 的跳过（极少见，可能是思考中间态）
+        if (!rec.message?.usage) continue;
 
         const usage = rec.message.usage;
         const tools = extractToolNames(rec.message.content);
-        const hasError = rec.message.content?.some(
-          (c) => c.type === "tool_use_result" || !!(c.tool_use_result as { is_error?: boolean })?.is_error,
-        ) ?? false;
+        // ponytail: tool_use_result (is_error) lives on user-type records, not assistant ones.
+        // Skipping for v1 — tool errors require cross-record correlation. Accept the blind spot.
+        const hasError = false;
 
-        // 时间戳：优先 message 级别
-        const ts = (rec as Record<string, unknown>).timestamp as string
-          ?? (rec as Record<string, unknown>).ts as string
-          ?? "";
+        if (rec.gitBranch && !branch) branch = rec.gitBranch;
 
         entries.push({
-          ts,
+          ts: rec.timestamp ?? "",
           inputTokens: usage.input_tokens ?? 0,
           cacheReadTokens: usage.cache_read_input_tokens ?? 0,
           cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
@@ -131,8 +132,6 @@ export function readIncremental(
           hasToolError: hasError,
           model: rec.message.model ?? "",
         });
-
-        if (rec.permission_mode && !permMode) permMode = rec.permission_mode;
       } catch {
         // 行解析失败：跳过（非 JSON 行、空行等）
       }
@@ -153,7 +152,7 @@ export function readIncremental(
       prev: prevMetrics,
       windowMeta: {
         aiTitle: title || windowMeta?.aiTitle,
-        gitBranch: windowMeta?.gitBranch,
+        gitBranch: branch || windowMeta?.gitBranch,
         permissionMode: permMode || windowMeta?.permissionMode,
       },
     };
