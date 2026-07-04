@@ -72,7 +72,7 @@ export type ClientMessage =
 // Core → Client
 // ─────────────────────────────────────────────────────────────
 export type ServerMessage =
-  | { type: "welcome"; activeProfile: string; profiles: string[]; engine: string; personaName: string }
+  | { type: "welcome"; activeProfile: string; profiles: string[]; engine: string; personaName: string; assetNames?: string[] }
   | { type: "session_created"; session: SessionInfo }
   | { type: "session_closed"; sessionId: string }
   | { type: "sessions"; sessions: SessionInfo[] }

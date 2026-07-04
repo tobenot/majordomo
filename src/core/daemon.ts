@@ -162,6 +162,7 @@ export class CoreDaemon {
           profiles: Object.keys(this.cfg.profiles),
           engine,
           personaName: this.cfg.persona.name,
+          assetNames: this.cfg.persona.assetNames,
         });
         this.sendTo(ws, { type: "sessions", sessions: this.mgr.list() });
         this.sendTo(ws, { type: "hub_snapshot", snapshot: this.hub.snapshot() });

@@ -26,6 +26,7 @@
     windows: {},        // windowId -> WindowInfo
     current: null,      // 当前展示的 windowId
     personaName: "中枢",
+    assetNames: [],
     unread: {},         // windowId -> true：交接来了但还没点"知道了"
   };
 
@@ -57,6 +58,7 @@
     switch (msg.type) {
       case "welcome":
         state.personaName = msg.personaName || "中枢";
+        state.assetNames = msg.assetNames || [];
         break;
       case "hub_snapshot":
         state.windows = {};
@@ -112,7 +114,7 @@
   // ── 立绘 / CG ──────────────────────────────────────────
   function loadStanding(windowId) {
     var w = state.windows[windowId];
-    var name = state.personaName || (w && w.title) || "";
+    var name = pickRandom(state.assetNames) || state.personaName || (w && w.title) || "";
 
     // 立绘
     var sImg = el("standing");
@@ -133,10 +135,15 @@
     }
   }
 
+  function pickRandom(arr) {
+    if (!arr || !arr.length) return "";
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
   function assetUrl(kind, name) {
     if (!name) return "";
     var safe = String(name).replace(/[^a-zA-Z0-9一-鿿_-]/g, "_");
-    return "assets/" + kind + "/" + safe + ".png";
+    return "assets/" + kind + "/" + safe + ".webp";
   }
 
   function loadImg(el, src) {

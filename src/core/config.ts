@@ -26,6 +26,8 @@ export interface PersonaConfig {
   mode: "auto" | "api" | "template";
   name: string;
   style: string;
+  /** 立绘/CG 素材候选名列表，随机抽一个。不填则用 name。 */
+  assetNames?: string[];
   /** 从 .majordomo/persona.md 加载的项目专属人设指令。 */
   projectInstructions?: string;
 }

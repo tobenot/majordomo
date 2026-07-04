@@ -25,6 +25,7 @@
     acceptance: [],
     current: null, // 选中的 windowId
     personaName: "中枢",
+    assetNames: [],
   };
 
   const STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
@@ -60,6 +61,7 @@
     switch (msg.type) {
       case "welcome":
         state.personaName = msg.personaName;
+        state.assetNames = msg.assetNames || [];
         el("personaName").textContent = msg.personaName;
         el("engineBadge").textContent = "人设: " + msg.personaName;
         break;
@@ -148,10 +150,15 @@
   }
 
   // ── 立绘 / CG ──────────────────────────────────────────
+  function pickRandom(arr) {
+    if (!arr || !arr.length) return "";
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
   function assetUrl(kind, name) {
     if (!name) return "";
     var safe = String(name).replace(/[^a-zA-Z0-9一-鿿_-]/g, "_");
-    return "assets/" + kind + "/" + safe + ".png";
+    return "assets/" + kind + "/" + safe + ".webp";
   }
 
   function loadImg(el, src) {
@@ -162,7 +169,7 @@
   }
 
   function loadImages(windowId) {
-    var name = state.personaName || "";
+    var name = pickRandom(state.assetNames) || state.personaName || "";
     loadImg(el("cgImg"), assetUrl("cg", name));
     loadImg(el("standingPanel"), assetUrl("standing", name));
   }
