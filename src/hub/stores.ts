@@ -254,6 +254,19 @@ export class AcceptanceStore extends JsonArrayStore<AcceptanceItem> {
     return this.add(opts);
   }
 
+  /** 按窗口 + kind 找到 pending 项并标记 resolved。用于告警自愈：miss% 回落自动消警。 */
+  resolveByWindowAndKind(windowId: string, kind: AcceptanceItem["kind"]): AcceptanceItem | undefined {
+    for (const a of this.map.values()) {
+      if (a.windowId === windowId && a.kind === kind && a.status === "pending") {
+        a.status = "resolved";
+        a.resolvedAt = Date.now();
+        this.persist();
+        return a;
+      }
+    }
+    return undefined;
+  }
+
   resolve(id: string): AcceptanceItem | undefined {
     const a = this.map.get(id);
     if (!a) return undefined;

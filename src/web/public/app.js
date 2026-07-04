@@ -133,6 +133,8 @@
     ws.forEach((w) => {
       const li = document.createElement("li");
       if (w.windowId === state.current) li.className = "active";
+      var hasMissAlert = w.metrics && w.metrics.missPercent > 0.04;
+      if (hasMissAlert) li.classList.add("window-alert");
       li.innerHTML =
         '<div class="s-name"><span class="dot ' + w.state + '"></span>' +
         escapeHtml(w.title) +
@@ -292,6 +294,10 @@
     ul.innerHTML = "";
     const pending = state.acceptance.filter((a) => a.status === "pending");
     el("accCount").textContent = pending.length;
+    // 赛博朋克告警：有任何 pending alert → header 灯条变红
+    var hasAlert = pending.some(function (a) { return a.kind === "alert"; });
+    document.body.classList.toggle("alert-active", hasAlert);
+    el("accCount").classList.toggle("count-alert", hasAlert);
     state.acceptance
       .slice()
       .sort((a, b) => (a.status === b.status ? b.createdAt - a.createdAt : a.status === "pending" ? -1 : 1))
@@ -312,13 +318,14 @@
     if (!m || !m.totalRounds) return "";
     var pct = Math.round(m.missPercent * 100);
     var slow = Math.round(m.latencyMaxMs / 1000);
-    return '<div class="s-metrics">miss ' + pct + '% · ' + m.totalRounds + '轮 · 慢峰' + slow + 's</div>';
+    var alertClass = m.missPercent > 0.04 ? " metrics-alert" : "";
+    return '<div class="s-metrics' + alertClass + '">miss ' + pct + '% · ' + m.totalRounds + '轮 · 慢峰' + slow + 's</div>';
   }
 
   function metricsDetail(m) {
     if (!m || !m.totalRounds) return "";
     return (
-      '<div class="metrics-card">' +
+      '<div class="metrics-card' + (m.missPercent > 0.04 ? ' metrics-card-alert' : '') + '">' +
       '<div class="metrics-title">会话度量</div>' +
       '<div class="metrics-grid">' +
         metricsKV('miss%', Math.round(m.missPercent * 100) + '%') +

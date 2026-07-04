@@ -98,7 +98,7 @@ export interface TodoItem {
 }
 
 // ── ③ AcceptanceStore ───────────────────────────────────────
-export type AcceptanceKind = "permission" | "review" | "decision";
+export type AcceptanceKind = "permission" | "review" | "decision" | "alert";
 export type AcceptanceStatus = "pending" | "resolved";
 
 export interface AcceptanceItem {

@@ -173,10 +173,36 @@ export class HubService {
       this.metricsCursors.set(windowId, result.cursor);
       if (result.metrics) {
         const updated = this.windows.updateMetrics(windowId, result.metrics);
-        if (updated) this.pushWindow(updated);
+        if (updated) {
+          this.pushWindow(updated);
+          this.checkMetricsAlert(updated);
+        }
       }
     } catch (e) {
       log.debug(`会话度量读取失败（窗口 ${windowId}）: ${(e as Error).message}`);
+    }
+  }
+
+  /** 缓存 miss% 超过阈值时告警，回落时自动消警。ponytail: 阈值硬编码 4%，配配置表再改。 */
+  private checkMetricsAlert(w: WindowInfo): void {
+    const m = w.metrics;
+    if (!m || m.totalRounds === 0) return;
+    const pct = Math.round(m.missPercent * 100);
+    if (m.missPercent > 0.04) {
+      const acc = this.acceptance.addUnique({
+        windowId: w.windowId,
+        what: `${w.title} 缓存miss率 ${pct}% 超阈值4%（${m.totalRounds}轮）`,
+        kind: "alert",
+      });
+      this.broadcast({ type: "acceptance", items: this.acceptance.list() });
+      void this.notifier.notify(`⚠️ ${w.title} miss ${pct}%`);
+      log.info(`告警: ${w.title} miss ${pct}% → acceptance ${acc.id}`);
+    } else {
+      const resolved = this.acceptance.resolveByWindowAndKind(w.windowId, "alert");
+      if (resolved) {
+        this.broadcast({ type: "acceptance", items: this.acceptance.list() });
+        log.debug(`消警: ${w.title} miss ${pct}% ≤ 4%，自动解除`);
+      }
     }
   }
 
