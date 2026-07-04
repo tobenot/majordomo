@@ -4,7 +4,7 @@
 # the daemon-served /popup page. It is a LONG-LIVED, self-updating window -- so this
 # launcher is idempotent: if the popup already exists, we only re-pin it on top and
 # exit; we do NOT spawn a second Edge window. Single-instance is keyed on the window
-# TITLE (the page's <title> = "majordomo-popup"), because msedge's multi-process model
+# TITLE (the page's <title> = "majordomo"), because msedge's multi-process model
 # makes the launched PID unreliable for "is my window still up".
 #
 # Exit codes: 0 = popup is up (spawned or already alive). 2 = no Edge found -> caller
@@ -14,7 +14,7 @@
 
 param(
     [string]$Url = 'http://127.0.0.1:4350/popup.html',
-    [string]$TitleMatch = 'majordomo-popup'
+    [string]$TitleMatch = 'majordomo'
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
