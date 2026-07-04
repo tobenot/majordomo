@@ -80,6 +80,7 @@ switch ($eventName) {
     'Stop'          {
         $mappedEvent = 'stop'
         $payload.text = Trim-Text ([string]$evt.last_assistant_message)
+        $payload.transcriptPath = [string]$evt.transcript_path
     }
     'Notification'  {
         $mappedEvent = 'notification'

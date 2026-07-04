@@ -2,6 +2,7 @@ import * as fs from "fs";
 import { hubStorePath, ensureDir, globalDir } from "../core/paths";
 import { createLogger } from "../core/logger";
 import { WindowInfo, WindowState, WindowActivity, TodoItem, AcceptanceItem, IngestEvent } from "./types";
+import { SessionMetrics } from "./sessionMetrics";
 
 const log = createLogger("hub:store");
 
@@ -126,6 +127,16 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
     const act: WindowActivity = { ts: now, event: opts.event, summary: opts.summary };
     w.activity.push(act);
     if (w.activity.length > ACTIVITY_KEEP) w.activity.splice(0, w.activity.length - ACTIVITY_KEEP);
+    this.persist();
+    return w;
+  }
+
+  /** 更新窗口的会话度量（缓存率 + 画像）。v1 只覆盖，不累积——metricsReader 已在外部做好聚合。 */
+  updateMetrics(windowId: string, metrics: SessionMetrics): WindowInfo | undefined {
+    const w = this.map.get(windowId);
+    if (!w) return undefined;
+    w.metrics = metrics;
+    w.updatedAt = Date.now();
     this.persist();
     return w;
   }

@@ -221,6 +221,7 @@
       var card = document.createElement("div");
       card.className = "win-card" + (unread ? " unread" : "");
       card.onclick = function () { showDetail(w.windowId); };
+      var metricsLine = popupMetrics(w.metrics);
       card.innerHTML =
         '<div class="win-card-head">' +
           '<span class="win-card-dot" style="color:' + (unread ? 'var(--honey)' : 'var(--border)') + '">●</span>' +
@@ -228,6 +229,7 @@
           '<span class="win-card-time">' + fmtTime(w.updatedAt) + "</span>" +
         "</div>" +
         '<div class="win-card-state">' + (STATE_LABEL[w.state] || w.state) + "</div>" +
+        (metricsLine ? '<div class="win-card-metrics">' + escapeHtml(metricsLine) + "</div>" : "") +
         (preview ? '<div class="win-card-preview">' + escapeHtml(preview) + "</div>" : "");
       list.appendChild(card);
     });
@@ -251,6 +253,11 @@
 
     var text = w.lastPersona || w.lastText || "";
     el("persona").innerHTML = text ? window.MjMarkdown.render(text) : '<span class="empty">（暂无交接文本）</span>';
+
+    // 会话度量（简短行内版）
+    var m = popupMetrics(w.metrics);
+    el("detailMetrics").textContent = m || "";
+    el("detailMetrics").style.display = m ? "" : "none";
 
     // 活动流
     var acts = el("acts");
@@ -366,6 +373,13 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  function popupMetrics(m) {
+    if (!m || !m.totalRounds) return "";
+    var pct = Math.round(m.missPercent * 100);
+    var slow = Math.round(m.latencyMaxMs / 1000);
+    return "miss " + pct + "% · " + m.totalRounds + "轮 · 慢峰" + slow + "s";
+  }
+
   function escapeAttr(s) { return escapeHtml(s).replace(/[^a-zA-Z0-9_-]/g, "_"); }
 
   connect();

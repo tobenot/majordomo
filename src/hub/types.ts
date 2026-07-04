@@ -5,6 +5,9 @@
  * 三张表（WindowRegistry / TodoStore / AcceptanceStore）是 v1 的核心状态。
  */
 
+import type { SessionMetrics } from "./sessionMetrics";
+export type { SessionMetrics } from "./sessionMetrics";
+
 /** Bifrost 上报事件的归一形状（report.ps1 POST 的 body，见设计稿 §2.5）。 */
 export interface IngestEnvelope {
   /** 窗口主键 = CC 的 session_id */
@@ -35,6 +38,8 @@ export interface IngestPayload {
   source?: string; // startup | resume | clear
   reason?: string; // prompt_input_exit | clear | ...
   notificationType?: string; // permission_prompt | idle_prompt | ...
+  /** transcript 文件路径（CC hook 的 transcript_path，透传），供中枢增量读 usage。 */
+  transcriptPath?: string;
 }
 
 // ── ① WindowRegistry ────────────────────────────────────────
@@ -71,6 +76,8 @@ export interface WindowInfo {
   activity: WindowActivity[];
   onlineSince: number;
   updatedAt: number;
+  /** 会话度量（缓存率 + 画像），v1 只显示原始数值，不做判定。 */
+  metrics?: SessionMetrics;
 }
 
 // ── ② TodoStore ─────────────────────────────────────────────

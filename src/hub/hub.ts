@@ -9,6 +9,8 @@ import { PersonaEngine } from "../persona/types";
 import { NotifierBus } from "../notify/factory";
 import { ServerMessage } from "../protocol/messages";
 import { createLogger } from "../core/logger";
+import { readIncremental, ReadIncrementalResult } from "./metricsReader";
+import { MetricsCursor, SessionMetrics } from "./sessionMetrics";
 
 const log = createLogger("hub");
 
@@ -25,6 +27,9 @@ export class HubService {
 
   /** 每窗口上次 persona 复命时间，用于节流（高频 Stop 不炸手机）。 */
   private lastPersonaAt = new Map<string, number>();
+
+  /** 每窗口在 transcript 文件里的读取位置（增量读用的游标）。 */
+  private metricsCursors = new Map<string, MetricsCursor>();
 
   constructor(
     private persona: PersonaEngine,
@@ -78,6 +83,10 @@ export class HubService {
           state: "idle", summary: summarize(text) || "完成一个回合", lastText: text,
         });
         this.pushWindow(w);
+        // 增量读 transcript 获取会话度量（v1：只显示数值，不做判定）
+        if (p.transcriptPath) {
+          void this.updateMetrics(env.windowId, p.transcriptPath);
+        }
         // 离线缓存排空的事件只录表、不翻人话（陈腐 > 5min 跳过 persona）
         if (text && !stale) void this.reportPersona(w, text);
         break;
@@ -156,6 +165,21 @@ export class HubService {
     this.broadcast({ type: "window_update", window: w });
   }
 
+  private async updateMetrics(windowId: string, transcriptPath: string): Promise<void> {
+    const cursor = this.metricsCursors.get(windowId) ?? null;
+    const prev = this.windows.get(windowId)?.metrics ?? null;
+    try {
+      const result = readIncremental(transcriptPath, cursor, prev);
+      this.metricsCursors.set(windowId, result.cursor);
+      if (result.metrics) {
+        const updated = this.windows.updateMetrics(windowId, result.metrics);
+        if (updated) this.pushWindow(updated);
+      }
+    } catch (e) {
+      log.debug(`会话度量读取失败（窗口 ${windowId}）: ${(e as Error).message}`);
+    }
+  }
+
   private async reportPersona(w: WindowInfo, workerText: string): Promise<void> {
     const now = Date.now();
     const last = this.lastPersonaAt.get(w.windowId) ?? 0;
@@ -165,9 +189,15 @@ export class HubService {
     }
     this.lastPersonaAt.set(w.windowId, now);
     try {
+      // 如有会话度量，把关键数值捎进上下文让 persona 提及
+      const metricsCtx = formatMetricsContext(w);
+      const reportInput = metricsCtx
+        ? `${workerText}\n\n[会话度量] miss ${(metricsCtx.missPercent * 100).toFixed(0)}%, ${metricsCtx.totalRounds}轮, 最慢${metricsCtx.latencyMaxS}s`
+        : workerText;
+
       const text = await this.persona.report({
         userText: "",
-        workerText,
+        workerText: reportInput,
         sessionName: w.title,
       });
       this.windows.addPersona(w.windowId, text);
@@ -200,6 +230,17 @@ export class HubService {
     this.acceptance.resolve(id);
     this.broadcast({ type: "acceptance", items: this.acceptance.list() });
   }
+}
+
+/** 摘一句话作活动流 summary。取首句 / 首行，截断。 */
+function formatMetricsContext(w: WindowInfo): { missPercent: number; totalRounds: number; latencyMaxS: number } | null {
+  const m = w.metrics;
+  if (!m || m.totalRounds === 0) return null;
+  return {
+    missPercent: m.missPercent,
+    totalRounds: m.totalRounds,
+    latencyMaxS: Math.round(m.latencyMaxMs / 1000),
+  };
 }
 
 /** 摘一句话作活动流 summary。取首句 / 首行，截断。 */

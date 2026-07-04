@@ -140,7 +140,8 @@
         (STATE_LABEL[w.state] || w.state) +
         " · " +
         escapeHtml(oneLine(w.lastSummary || w.lastText || "", 60)) +
-        "</div>";
+        "</div>" +
+        (w.metrics ? metricsSummary(w.metrics) : "");
       li.onclick = () => selectWindow(w.windowId);
       ul.appendChild(li);
     });
@@ -227,6 +228,9 @@
       pScroll.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';
     }
 
+    // 会话度量
+    el("metricsArea").innerHTML = metricsDetail(w.metrics);
+
     // Activity 日志（折叠）
     var acts = (w.activity || []).slice().reverse();
     if (acts.length) {
@@ -302,6 +306,50 @@
         if (btn) btn.onclick = () => send({ type: "acceptance_resolve", id: a.id });
         ul.appendChild(li);
       });
+  }
+
+  function metricsSummary(m) {
+    if (!m || !m.totalRounds) return "";
+    var pct = Math.round(m.missPercent * 100);
+    var slow = Math.round(m.latencyMaxMs / 1000);
+    return '<div class="s-metrics">miss ' + pct + '% · ' + m.totalRounds + '轮 · 慢峰' + slow + 's</div>';
+  }
+
+  function metricsDetail(m) {
+    if (!m || !m.totalRounds) return "";
+    return (
+      '<div class="metrics-card">' +
+      '<div class="metrics-title">会话度量</div>' +
+      '<div class="metrics-grid">' +
+        metricsKV('miss%', Math.round(m.missPercent * 100) + '%') +
+        metricsKV('最近段 miss%', Math.round(m.lastSegmentMissPercent * 100) + '%') +
+        metricsKV('塌方峰值', Math.round(m.maxSingleRoundInput).toLocaleString() + ' token') +
+        metricsKV('累计产出', Math.round(m.cumulativeOutputTokens).toLocaleString() + ' token') +
+        metricsKV('总轮数', String(m.totalRounds)) +
+        metricsKV('会话时长', fmtDuration(m.sessionDurationMs)) +
+        metricsKV('每轮耗时中位', fmtMs(m.latencyMedianMs)) +
+        metricsKV('每轮耗时 p90', fmtMs(m.latencyP90Ms)) +
+        metricsKV('每轮耗时 max', fmtMs(m.latencyMaxMs)) +
+        metricsKV('tool_use 比', Math.round(m.toolUseRatio * 100) + '%') +
+        metricsKV('最长 turn', fmtMs(m.maxTurnDurationMs)) +
+        metricsKV('工具报错', String(m.toolErrorCount)) +
+        (m.aiTitle ? metricsKV('标题', escapeHtml(m.aiTitle)) : "") +
+        (m.gitBranch ? metricsKV('分支', escapeHtml(m.gitBranch)) : "") +
+        (m.permissionMode ? metricsKV('权限', escapeHtml(m.permissionMode)) : "") +
+        (m.topTools && m.topTools.length ? metricsKV('常用工具', m.topTools.map(function (t) { return t[0] + '(' + t[1] + ')'; }).join(', ')) : "") +
+      '</div></div>');
+  }
+
+  function metricsKV(label, val) {
+    return '<div class="metrics-kv"><span class="mk">' + escapeHtml(label) + '</span><span class="mv">' + escapeHtml(val) + '</span></div>';
+  }
+
+  function fmtMs(ms) { return ms < 1000 ? Math.round(ms) + 'ms' : (ms / 1000).toFixed(1) + 's'; }
+  function fmtDuration(ms) {
+    var m = Math.floor(ms / 60000);
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    return h > 0 ? h + 'h' + m + 'm' : m + 'm';
   }
 
   function renderAll() {
