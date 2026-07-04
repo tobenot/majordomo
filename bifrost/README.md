@@ -1,4 +1,8 @@
-# Bifrost（虹桥）· v0.1
+# Bifrost（虹桥）
+
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/tobenot/majordomo)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-green)](../LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Plugin-orange)](https://codebuddy.woa.com)
 
 装进每个 Claude Code 窗口的插件。用 hook 把窗口活动上报中枢，并在本地放提示音/弹窗。
 对应设计稿 `docs/design/bifrost-hub-v1.md`。
@@ -11,6 +15,25 @@
 claude --plugin-dir ./bifrost        # 从磁盘目录直接加载
 # 改完热载：/reload-plugins（改 plugin.json 需重开窗口）
 ```
+
+## Statusline 徽章
+
+`[BIFROST]` 在 Claude Code 状态栏显示彩虹渐变徽章——中枢连通时每回合换一个颜色，彩虹桥（Bifrost）本体。中枢不在 → 不显示。
+
+**设置**：在 `~/.claude/settings.json` 加上：
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"D:\\GitRep\\majordomo\\bifrost\\scripts\\bifrost-statusline.ps1\""
+}
+```
+
+> 路径按实际插件目录改。装进 Claude Code 插件市场后可用 `${CLAUDE_PLUGIN_ROOT}` 自动定位。
+
+**7 色循环**（均为中等亮度，深色/浅色终端均清晰）：🟠橙 → 🟡金 → 🟢绿 → 🩵青 → 🔵蓝 → 🟣紫 → 🩷玫红。
+
+`report.ps1` 每次 Stop 成功后写入 `cache/status.json`（`{"reachable":true, "hue":N}`），statusline 脚本只读文件，无网络开销。多窗口竞争写无害——颜色偶尔跳一格而已。
 
 ## 它做什么
 

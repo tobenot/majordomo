@@ -296,6 +296,7 @@ switch ($mappedEvent) {
 # sitting in front of the turn's end. Reachable -> POST + drain backlog;
 # unreachable or POST fails -> cache and move on.
 # ---------------------------------------------------------------------------
+$sent = $false
 if (Test-HubReachable) {
     $sent = $false
     try { Send-Ingest $json; $sent = $true } catch { $sent = $false }
@@ -303,5 +304,21 @@ if (Test-HubReachable) {
 } else {
     Cache-Offline $json
 }
+
+# ---------------------------------------------------------------------------
+# Status badge file — bifrost-statusline.ps1 reads this to show a rainbow
+# [BIFROST] badge in the Claude Code statusline. Hue cycles 0-6 on every
+# successful Stop POST (multi-window races are harmless: color just jumps).
+# ---------------------------------------------------------------------------
+$statusFile = Join-Path $cacheDir 'status.json'
+$oldHue = 0
+if (Test-Path $statusFile) {
+    try { $oldHue = [int]((Get-Content $statusFile -Raw -Encoding UTF8 | ConvertFrom-Json).hue) } catch { }
+}
+try {
+    [ordered]@{ reachable = $sent; hue = $oldHue + 1 } `
+        | ConvertTo-Json -Compress `
+        | Set-Content -Path $statusFile -Encoding UTF8
+} catch { }
 
 exit 0
