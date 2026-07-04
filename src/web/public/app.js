@@ -270,6 +270,7 @@
   function renderAll() {
     renderWindows();
     renderDetail();
+    loadImages();
     renderTodos();
     renderAcceptance();
   }
