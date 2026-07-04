@@ -16,6 +16,8 @@ const C = {
   magenta: "\x1b[35m",
   blue: "\x1b[34m",
   bold: "\x1b[1m",
+  // 黑石海滩主题扩展：彩虹色条(亮青/亮紫) + 蜂蜜色
+  honey: "\x1b[38;5;214m",   // 蜂蜜琥珀
 };
 
 const PASTE_START = "\x1b[200~";

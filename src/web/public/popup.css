@@ -1,15 +1,17 @@
-/* majordomo 交接浮窗：无边框小窗，复用面板暗色调，为窄窗（~440px）优化。 */
+/* majordomo 交接浮窗：黑石海滩主题 */
 :root {
-  --bg: #0e1016;
-  --panel: #151823;
-  --panel2: #1b1f2e;
-  --border: #2a3042;
-  --text: #e8ebf2;
-  --text2: #98a0b3;
-  --accent: #4d8dff;
-  --accent2: #b46bff;
-  --green: #35c46a;
-  --yellow: #e6b450;
+  --bg: #0d0d10;
+  --panel: #16161c;
+  --panel2: #1e1e25;
+  --border: #2c2c35;
+  --text: #e8e5de;
+  --text2: #89867e;
+  --accent: #4dc8f0;
+  --accent2: #c084fc;
+  --honey: #f0a030;
+  --honey-light: #fcd078;
+  --green: #4caf7c;
+  --yellow: #f0a030;
 }
 
 * { box-sizing: border-box; }
@@ -28,33 +30,35 @@ html, body {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #191d2c, var(--bg));
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #1c1c24, var(--bg));
+  border: 1px solid transparent;
+  border-image: linear-gradient(180deg, #3a3a44, var(--border)) 1;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }
 /* 新交接进来时脉冲一下边框，提示"有更新" */
 .card.pulse { animation: pulse 1.1s ease-out; }
 @keyframes pulse {
-  0% { border-color: var(--accent2); box-shadow: 0 0 0 0 rgba(180, 107, 255, 0.5), 0 12px 40px rgba(0,0,0,0.5); }
-  100% { border-color: var(--border); box-shadow: 0 0 0 12px rgba(180, 107, 255, 0), 0 12px 40px rgba(0,0,0,0.5); }
+  0% { border-color: var(--honey); box-shadow: 0 0 0 0 rgba(240, 160, 48, 0.5), 0 12px 40px rgba(0,0,0,0.6); }
+  100% { border-color: var(--border); box-shadow: 0 0 0 12px rgba(240, 160, 48, 0), 0 12px 40px rgba(0,0,0,0.6); }
 }
 /* 未读辉光：脉冲闪完就没了，没在看屏幕会漏。这道呼吸辉光一直亮到你点"知道了"，
    收起成标题条时也不熄——被动置顶的窗口需要一个不会消失的"还没看"信号。 */
-.card.unread { border-color: var(--accent2); animation: breathe 2.4s ease-in-out infinite; }
+.card.unread { border-color: var(--honey); animation: breathe 2.4s ease-in-out infinite; }
 .card.unread.pulse { animation: pulse 1.1s ease-out, breathe 2.4s ease-in-out infinite 1.1s; }
 @keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(180, 107, 255, 0.0), 0 12px 40px rgba(0,0,0,0.5); }
-  50% { box-shadow: 0 0 14px 2px rgba(180, 107, 255, 0.45), 0 12px 40px rgba(0,0,0,0.5); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 160, 48, 0.0), 0 12px 40px rgba(0,0,0,0.6); }
+  50% { box-shadow: 0 0 14px 2px rgba(240, 160, 48, 0.5), 0 12px 40px rgba(0,0,0,0.6); }
 }
 
 /* ── 头部（可拖拽） ── */
 header {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px;
-  background: linear-gradient(180deg, #1c2233, var(--panel));
-  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #1e1e28, var(--panel));
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, #ff6b8a, #ff9e4f, #f5d742, #4dc8f0, #c084fc) 1;
   -webkit-app-region: drag; /* Edge app 模式下整条头部可拖窗 */
   flex: none;
 }
@@ -66,7 +70,7 @@ header button, header .conn { -webkit-app-region: no-drag; }
   -webkit-app-region: no-drag; cursor: pointer; flex: none;
   font-size: 11px; font-weight: 700; line-height: 1;
   padding: 3px 7px; border-radius: 10px;
-  background: var(--accent2); color: #fff;
+  background: var(--honey); color: #0d0d10;
 }
 .more:hover { filter: brightness(1.15); }
 .spacer { flex: 1; }
@@ -97,7 +101,7 @@ header button, header .conn { -webkit-app-region: no-drag; }
   background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
 }
 .body pre {
-  background: #0b0d14; border: 1px solid var(--border); border-radius: 8px;
+  background: #0b0b10; border: 1px solid var(--border); border-radius: 8px;
   padding: 10px 12px; margin: 8px 0; overflow-x: auto;
 }
 .body pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
@@ -135,8 +139,8 @@ footer button {
   background: var(--panel2); color: var(--text); border: 1px solid var(--border);
 }
 footer button:hover { background: #232838; }
-footer button.primary { background: var(--accent); color: #fff; border-color: var(--accent); flex: 1.4; }
-footer button.primary:hover { background: #6aa0ff; }
+footer button.primary { background: var(--accent); color: #0d0d10; border-color: var(--accent); flex: 1.4; font-weight: 600; }
+footer button.primary:hover { background: #6cd8f8; }
 footer button.copied { background: var(--green); color: #fff; border-color: var(--green); }
 
 /* 收起态：只留头部一条，待命不打扰 */
