@@ -174,20 +174,31 @@
 
   function loadImages(windowId) {
     var name = pickRandom(state.assetNames) || state.personaName || "";
-    loadImg(el("cgImg"), assetUrl("cg", name));
+    // CG 作为氛围底板：铺在人设消息区顶部，压暗渐隐
+    var cgSrc = assetUrl("cg", name);
+    var amb = el("cgAmbient");
+    if (amb && cgSrc) {
+      var probe = new Image();
+      probe.onload = function () { amb.style.backgroundImage = "url('" + cgSrc + "')"; amb.classList.add("loaded"); };
+      probe.onerror = function () { amb.style.backgroundImage = ""; amb.classList.remove("loaded"); };
+      probe.src = cgSrc;
+    } else if (amb) {
+      amb.style.backgroundImage = ""; amb.classList.remove("loaded");
+    }
     loadImg(el("standingPanel"), assetUrl("standing", name));
+    loadImg(el("cgImg"), assetUrl("cg", name));
   }
 
   function renderDetail() {
     const w = state.windows.find((x) => x.windowId === state.current);
-    const pBox = el("personaBox");
+    const pScroll = el("personaScroll");
     const actWrap = el("activityWrap");
     const act = el("activity");
     if (!w) {
       el("detailTitle").textContent = "选一个窗口看它在做什么";
       el("detailState").textContent = "";
       el("detailState").className = "badge";
-      pBox.innerHTML = "";
+      if (pScroll) pScroll.innerHTML = "";
       actWrap.classList.add("hidden");
       return;
     }
@@ -211,9 +222,9 @@
           '</div>';
       }
       html += '</div>';
-      pBox.innerHTML = html;
+      pScroll.innerHTML = html;
     } else {
-      pBox.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';
+      pScroll.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';
     }
 
     // Activity 日志（折叠）

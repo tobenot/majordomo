@@ -59,6 +59,7 @@
       case "welcome":
         state.personaName = msg.personaName || "中枢";
         state.assetNames = msg.assetNames || [];
+        loadPersistentArt();
         break;
       case "hub_snapshot":
         state.windows = {};
@@ -126,6 +127,14 @@
   }
 
   // ── 立绘 / CG ──────────────────────────────────────────
+  // 常驻美术：头像圆章（收起态也在）+ 列表态立绘 peek。用固定名，全程稳定。
+  function loadPersistentArt() {
+    var name = (state.assetNames && state.assetNames[0]) || state.personaName || "";
+    var standing = assetUrl("standing", name);
+    loadImg(el("avatar"), standing);
+    loadImg(el("standingPeek"), standing);
+  }
+
   function loadStanding(windowId) {
     var w = state.windows[windowId];
     var name = pickRandom(state.assetNames) || state.personaName || (w && w.title) || "";

@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>majordomo · 中枢</title>
+    <link rel="icon" href="assets/favicon.svg" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <header>
       <div class="brand">
-        <span class="logo">⌘</span>
+        <img class="logo" src="assets/favicon.svg" alt="⌘" />
         <span class="title">majordomo</span>
         <span class="subtitle" id="personaName">中枢</span>
       </div>
@@ -38,6 +39,8 @@
           <span id="detailState" class="badge"></span>
         </div>
         <div id="personaBox" class="persona-box">
+          <div class="cg-ambient" id="cgAmbient"></div>
+          <div class="persona-scroll" id="personaScroll"></div>
           <img class="standing-panel" id="standingPanel" src="" alt="" />
         </div>
         <details id="activityWrap" class="activity-wrap">

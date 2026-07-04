@@ -36,8 +36,8 @@ header {
   border-bottom: 2px solid transparent;
   border-image: linear-gradient(90deg, #ff6b8a, #ff9e4f, #f5d742, #4dc8f0, #c084fc) 1;
 }
-.brand { display: flex; align-items: baseline; gap: 10px; }
-.logo { font-size: 20px; color: var(--accent); }
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo { width: 26px; height: 26px; display: block; filter: drop-shadow(0 0 6px rgba(77, 200, 240, 0.35)); }
 .title { font-weight: 700; font-size: 17px; }
 .subtitle { color: var(--accent2); font-size: 13px; }
 .status { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--text2); }
@@ -122,22 +122,57 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* ── 人设消息气泡流 ── */
 .persona-box {
-  flex: 1; overflow-y: auto; padding: 14px 22px;
+  flex: 1; overflow: hidden; padding: 0;
   position: relative;
 }
-/* 立绘：9:16，右下角固定，无匹配时隐藏 */
-.standing-panel {
-  display: none; position: fixed; right: 24px; bottom: 24px; z-index: 10;
-  width: 80px; aspect-ratio: 9 / 16;
-  object-fit: contain; border-radius: 8px;
-  background: linear-gradient(180deg, #1a1a24, var(--bg));
-  border: 1px solid var(--border);
+/* CG 氛围底板：铺满、重压暗、向下渐隐到背景色。几乎看不见，只给"她在场"的暗示。 */
+.cg-ambient {
+  position: absolute; inset: 0; z-index: 0;
+  background-size: cover; background-position: center 22%;
+  opacity: 0; transition: opacity 0.8s ease;
   pointer-events: none;
+  /* 顶部留一点，越往下越透明，让文字始终清楚 */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.18) 34%, transparent 62%);
+          mask-image: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.18) 34%, transparent 62%);
+  filter: saturate(0.9) brightness(0.5);
+}
+.cg-ambient.loaded { opacity: 1; }
+/* 压暗遮罩，压在 CG 上、文字下 */
+.cg-ambient::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(13,13,16,0.35), rgba(13,13,16,0.72));
+}
+/* 真正滚动的消息层，浮在氛围底板之上 */
+.persona-scroll {
+  position: relative; z-index: 1;
+  height: 100%; overflow-y: auto; padding: 16px 22px;
+}
+/* 立绘：9:16，右下角固定放大，柔光浮起，指针穿透 */
+.standing-panel {
+  display: none; position: fixed; right: 22px; bottom: 20px; z-index: 5;
+  width: clamp(120px, 15vw, 240px); aspect-ratio: 9 / 16;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 18px rgba(192, 132, 252, 0.18));
+  pointer-events: none;
+  opacity: 0.92;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.5s, filter 0.5s;
+  animation: standing-in 0.7s cubic-bezier(0.2, 0.9, 0.25, 1);
 }
 .standing-panel.loaded { display: block; }
+@keyframes standing-in {
+  0% { transform: translateY(28px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 0.92; }
+}
+/* 悬在她身上时轻轻浮起、更亮、彩虹翼辉光更盛 */
+.persona-box:hover .standing-panel.loaded {
+  opacity: 1; transform: translateY(-6px) scale(1.02);
+  filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 26px rgba(192, 132, 252, 0.32));
+}
 .persona-msgs.empty {
   color: var(--text2); font-size: 13px; padding: 20px 0; text-align: center;
 }
+/* 末条气泡留出空间，别被右下角立绘压住 */
+.persona-msgs { padding-bottom: 90px; }
 .persona-bubble {
   margin-bottom: 14px;
   padding: 11px 15px; border-radius: 12px;
@@ -244,9 +279,9 @@ main { flex: 1; display: flex; min-height: 0; }
 .hidden { display: none !important; }
 
 /* ── 蜂蜜滚动条 ── */
-.persona-box, #windowList, .activity, .rail-list { scrollbar-color: var(--honey) var(--panel2); }
-.persona-box::-webkit-scrollbar, #windowList::-webkit-scrollbar, .activity::-webkit-scrollbar, .rail-list::-webkit-scrollbar { width: 6px; }
-.persona-box::-webkit-scrollbar-track, #windowList::-webkit-scrollbar-track, .activity::-webkit-scrollbar-track, .rail-list::-webkit-scrollbar-track { background: var(--panel2); }
-.persona-box::-webkit-scrollbar-thumb, #windowList::-webkit-scrollbar-thumb, .activity::-webkit-scrollbar-thumb, .rail-list::-webkit-scrollbar-thumb { background: var(--honey); border-radius: 3px; }
-.persona-box::-webkit-scrollbar-thumb:hover, #windowList::-webkit-scrollbar-thumb:hover, .activity::-webkit-scrollbar-thumb:hover, .rail-list::-webkit-scrollbar-thumb:hover,
-.persona-box::-webkit-scrollbar-thumb:active, #windowList::-webkit-scrollbar-thumb:active, .activity::-webkit-scrollbar-thumb:active, .rail-list::-webkit-scrollbar-thumb:active { background: var(--honey-light); }
+.persona-scroll, #windowList, .activity, .rail-list { scrollbar-color: var(--honey) var(--panel2); }
+.persona-scroll::-webkit-scrollbar, #windowList::-webkit-scrollbar, .activity::-webkit-scrollbar, .rail-list::-webkit-scrollbar { width: 6px; }
+.persona-scroll::-webkit-scrollbar-track, #windowList::-webkit-scrollbar-track, .activity::-webkit-scrollbar-track, .rail-list::-webkit-scrollbar-track { background: var(--panel2); }
+.persona-scroll::-webkit-scrollbar-thumb, #windowList::-webkit-scrollbar-thumb, .activity::-webkit-scrollbar-thumb, .rail-list::-webkit-scrollbar-thumb { background: var(--honey); border-radius: 3px; }
+.persona-scroll::-webkit-scrollbar-thumb:hover, #windowList::-webkit-scrollbar-thumb:hover, .activity::-webkit-scrollbar-thumb:hover, .rail-list::-webkit-scrollbar-thumb:hover,
+.persona-scroll::-webkit-scrollbar-thumb:active, #windowList::-webkit-scrollbar-thumb:active, .activity::-webkit-scrollbar-thumb:active, .rail-list::-webkit-scrollbar-thumb:active { background: var(--honey-light); }

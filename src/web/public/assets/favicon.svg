@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- majordomo mark: 苏雨晴的彩虹机械翼 + 蜂蜜齿轮。黑石海滩配色。 -->
+  <defs>
+    <linearGradient id="rw" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff6b8a"/>
+      <stop offset=".28" stop-color="#ff9e4f"/>
+      <stop offset=".5" stop-color="#f5d742"/>
+      <stop offset=".74" stop-color="#4dc8f0"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <linearGradient id="hy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fcd078"/>
+      <stop offset="1" stop-color="#f0a030"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="#0d0d10" stroke="url(#rw)" stroke-width="2"/>
+  <!-- 彩虹翼刀（左） -->
+  <g fill="url(#rw)" opacity=".9">
+    <path d="M30 40 L8 26 L12 22 L31 36 Z"/>
+    <path d="M30 38 L10 18 L15 15 L31 33 Z"/>
+    <path d="M31 36 L16 12 L21 11 L32 30 Z"/>
+    <!-- 右 -->
+    <path d="M34 40 L56 26 L52 22 L33 36 Z"/>
+    <path d="M34 38 L54 18 L49 15 L33 33 Z"/>
+    <path d="M33 36 L48 12 L43 11 L32 30 Z"/>
+  </g>
+  <!-- 蜂蜜齿轮核心 -->
+  <g fill="url(#hy)">
+    <g>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(0 32 40)"/>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(45 32 40)"/>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(90 32 40)"/>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(135 32 40)"/>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(180 32 40)"/>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(225 32 40)"/>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(270 32 40)"/>
+      <rect x="30" y="27" width="4" height="7" rx="1" transform="rotate(315 32 40)"/>
+    </g>
+    <circle cx="32" cy="40" r="9"/>
+  </g>
+  <circle cx="32" cy="40" r="3.6" fill="#0d0d10"/>
+</svg>
