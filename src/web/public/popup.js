@@ -1,7 +1,6 @@
-// majordomo 交接浮窗：常驻置顶，订阅中枢 WS。任一窗口交接（stop 有 persona / notification）
-// 时把浮窗刷成"最新交接"，脉冲 + 留一道"未读"呼吸辉光直到你点知道了。同源 WS = daemon
-// 自身端口（popup 页由 daemon 直供）。提示音由 notify-done（PS）独占，浮窗不出声——
-// Edge app 全新 user-data-dir 无用户手势，WebAudio 必被 autoplay 拦，出声看运气反成噪音。
+// majordomo 交接浮窗：常驻置顶，订阅中枢 WS。
+// 双模式：列表（多窗口一览）/ 详情（单窗口 persona 全文）。
+// 新事件不抢焦点——只标记未读 + 更新提示，等你主动翻。
 (function () {
   "use strict";
 
@@ -24,10 +23,11 @@
   var state = {
     ws: null,
     windows: {},        // windowId -> WindowInfo
-    current: null,      // 当前展示的 windowId
+    current: null,      // 详情模式展示的 windowId
     personaName: "中枢",
     assetNames: [],
-    unread: {},         // windowId -> true：交接来了但还没点"知道了"
+    unread: {},         // windowId -> true
+    mode: "collapsed",  // 'list' | 'detail' | 'collapsed'
   };
 
   var STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
@@ -63,21 +63,19 @@
       case "hub_snapshot":
         state.windows = {};
         (msg.snapshot.windows || []).forEach(function (w) { state.windows[w.windowId] = w; });
-        // 首次连上：展示最近活跃且有内容的窗口，但不脉冲/响铃（不是新事件）
-        var latest = latestInteresting();
-        if (latest) { state.current = latest.windowId; render(); }
+        if (state.mode === "collapsed") showList();
+        else render();
         break;
       case "window_update":
         upsert(msg.window);
         break;
       case "window_offline":
         if (state.windows[msg.windowId]) state.windows[msg.windowId].state = "offline";
-        if (state.current === msg.windowId) render();
+        render();
         break;
       case "window_persona":
-        // 交接文本到位 = 一次真正的"交接"，切到该窗口 + 脉冲 + 响铃
         if (state.windows[msg.windowId]) state.windows[msg.windowId].lastPersona = msg.text;
-        focus(msg.windowId, true);
+        upsert(state.windows[msg.windowId]);
         break;
     }
   }
@@ -85,30 +83,46 @@
   function upsert(w) {
     var prev = state.windows[w.windowId];
     state.windows[w.windowId] = w;
-    // 窗口转入"等你"（notification）是需要你介入的信号：切过去提醒
+
     var becameWaiting = w.state === "waiting" && (!prev || prev.state !== "waiting");
-    if (becameWaiting) { focus(w.windowId, true); return; }
-    if (state.current === w.windowId) render();
-  }
+    var hasNewPersona = w.lastPersona && (!prev || prev.lastPersona !== w.lastPersona);
 
-  function latestInteresting() {
-    var arr = [];
-    for (var k in state.windows) if (state.windows.hasOwnProperty(k)) arr.push(state.windows[k]);
-    arr = arr.filter(function (w) { return w.state !== "offline"; });
-    arr.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
-    return arr[0] || null;
-  }
-
-  // 把某窗口设为当前并渲染；alert=true 则脉冲 + 展开 + 标记未读（声音由 PS 独占）
-  function focus(windowId, alert) {
-    state.current = windowId;
-    if (alert) state.unread[windowId] = true;
-    render();
-    loadStanding(windowId);
-    if (alert) {
-      expand();
-      pulse();
+    // 需要你介入 或 有新 persona → 标记未读
+    if (becameWaiting || hasNewPersona) {
+      state.unread[w.windowId] = true;
+      // 不抢焦点：如果正在看别的窗口，只脉冲提示，不切走
+      if (state.mode === "detail" && state.current !== w.windowId) {
+        pulse(); // 轻脉冲提示有新东西
+        render(); // 更新头部 +N 标签
+        return;
+      }
+      // 列表模式或收起态 → 展开列表，不自动切到详情
+      if (state.mode !== "detail") {
+        showList();
+        pulse();
+        return;
+      }
     }
+
+    // 正在看的就是这个窗口 → 刷新详情
+    if (state.mode === "detail" && state.current === w.windowId) render();
+    else if (state.mode === "list") render();
+  }
+
+  // ── 模式切换 ────────────────────────────────────────────
+  function showList() {
+    state.mode = "list";
+    state.current = null;
+    expand();
+    render();
+  }
+
+  function showDetail(windowId) {
+    state.mode = "detail";
+    state.current = windowId;
+    loadStanding(windowId);
+    expand();
+    render();
   }
 
   // ── 立绘 / CG ──────────────────────────────────────────
@@ -116,12 +130,10 @@
     var w = state.windows[windowId];
     var name = pickRandom(state.assetNames) || state.personaName || (w && w.title) || "";
 
-    // 立绘
     var sImg = el("standing");
     var sSrc = assetUrl("standing", name);
     loadImg(sImg, sSrc);
 
-    // CG 横幅
     var cBanner = el("cgBanner");
     var cImg = el("cgBannerImg");
     var cSrc = assetUrl("cg", name);
@@ -155,26 +167,83 @@
 
   // ── 渲染 ────────────────────────────────────────────────
   function render() {
-    var w = state.windows[state.current];
-    if (!w) {
+    if (state.mode === "detail") renderDetail();
+    else if (state.mode === "list") renderList();
+    else renderCollapsed();
+  }
+
+  function renderCollapsed() {
+    el("proj").textContent = "majordomo";
+    el("more").style.display = "none";
+    el("time").textContent = "";
+    el("listWrap").style.display = "none";
+    el("detailWrap").style.display = "none";
+    el("card").classList.add("collapsed");
+  }
+
+  function renderList() {
+    el("card").classList.remove("collapsed");
+    el("listWrap").style.display = "";
+    el("detailWrap").style.display = "none";
+
+    // 头部：显示项目名和未读计数
+    var all = windowList();
+    var unreadCount = 0;
+    for (var k in state.unread) { if (state.unread.hasOwnProperty(k) && state.unread[k]) unreadCount++; }
+
+    if (all.length > 0) {
+      el("proj").textContent = unreadCount > 0 ? ("窗口 (" + unreadCount + " 项更新)") : "窗口";
+    } else {
       el("proj").textContent = "majordomo";
-      el("persona").innerHTML = '<span class="empty">等待窗口交接…</span>';
-      el("acts").innerHTML = "";
-      el("time").textContent = "";
-      renderMore();
+    }
+    el("more").style.display = "none";
+    el("time").textContent = "";
+
+    // 渲染列表卡片
+    var list = el("windowList");
+    list.innerHTML = "";
+    if (all.length === 0) {
+      list.innerHTML = '<div class="list-empty">等待窗口交接…</div>';
       return;
     }
-    el("proj").textContent = w.title || "majordomo";
+    all.forEach(function (w) {
+      var unread = !!state.unread[w.windowId];
+      var preview = w.lastPersona || w.lastSummary || w.lastText || "";
+      var card = document.createElement("div");
+      card.className = "win-card" + (unread ? " unread" : "");
+      card.onclick = function () { showDetail(w.windowId); };
+      card.innerHTML =
+        '<div class="win-card-head">' +
+          '<span class="win-card-dot" style="color:' + (unread ? 'var(--honey)' : 'var(--border)') + '">●</span>' +
+          '<span class="win-card-title">' + escapeHtml(w.title || "majordomo") + "</span>" +
+          '<span class="win-card-time">' + fmtTime(w.updatedAt) + "</span>" +
+        "</div>" +
+        '<div class="win-card-state">' + (STATE_LABEL[w.state] || w.state) + "</div>" +
+        (preview ? '<div class="win-card-preview">' + escapeHtml(preview) + "</div>" : "");
+      list.appendChild(card);
+    });
+  }
+
+  function renderDetail() {
+    el("card").classList.remove("collapsed");
+    el("listWrap").style.display = "none";
+    el("detailWrap").style.display = "";
+
+    var w = state.windows[state.current];
+    if (!w) { showList(); return; }
+
+    el("proj").textContent = (w.title || "majordomo");
     el("proj").title = w.cwd || "";
     el("time").textContent = fmtTime(w.updatedAt) + " · " + (STATE_LABEL[w.state] || w.state);
     el("who").textContent = state.personaName;
 
-    // 未读呼吸辉光：交接来了但没点"知道了"就一直亮，被动置顶窗口需要一个不消失的信号
+    // 未读辉光
     el("card").classList.toggle("unread", !!state.unread[state.current]);
 
     var text = w.lastPersona || w.lastText || "";
     el("persona").innerHTML = text ? window.MjMarkdown.render(text) : '<span class="empty">（暂无交接文本）</span>';
 
+    // 活动流
     var acts = el("acts");
     acts.innerHTML = "";
     (w.activity || []).slice().reverse().slice(0, 12).forEach(function (a) {
@@ -186,11 +255,11 @@
         '<span class="act-sum">' + escapeHtml(a.summary) + "</span>";
       acts.appendChild(row);
     });
+
+    // 未读计数标签
     renderMore();
   }
 
-  // 头部"还有 N 个窗口等你"：多窗口同时交接时，只显最新那个会把其余的从视野抹掉。
-  // 统计除当前外仍未读的窗口数，点它轮换到下一个未读窗口。
   function renderMore() {
     var chip = el("more");
     if (!chip) return;
@@ -200,61 +269,48 @@
     }
     if (others > 0) {
       chip.textContent = "+" + others;
-      chip.title = "还有 " + others + " 个窗口等你，点击切换";
+      chip.title = "还有 " + others + " 个窗口等你，点击返回列表";
       chip.style.display = "";
+      chip.onclick = showList;
     } else {
       chip.style.display = "none";
     }
   }
 
-  // 轮换到下一个未读窗口（按更新时间，环形）
-  function cycleUnread() {
-    var ids = [];
-    for (var k in state.unread) {
-      if (state.unread.hasOwnProperty(k) && state.unread[k] && k !== state.current && state.windows[k]) ids.push(k);
-    }
-    if (!ids.length) return;
-    ids.sort(function (a, b) { return state.windows[b].updatedAt - state.windows[a].updatedAt; });
-    focus(ids[0], false);
-    expand();
+  function windowList() {
+    var arr = [];
+    for (var k in state.windows) if (state.windows.hasOwnProperty(k)) arr.push(state.windows[k]);
+    arr = arr.filter(function (w) { return w.state !== "offline"; });
+    arr.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+    return arr;
   }
-
-  function currentPlainText() {
-    var w = state.windows[state.current];
-    if (!w) return "";
-    return w.lastPersona || w.lastText || "";
-  }
-
-  // ── 视觉/听觉提示 ───────────────────────────────────────
-  function pulse() {
-    var card = el("card");
-    card.classList.remove("pulse");
-    void card.offsetWidth; // 重置动画
-    card.classList.add("pulse");
-  }
-  function expand() { el("card").classList.remove("collapsed"); }
-  function collapse() { el("card").classList.add("collapsed"); }
-
-  // ── 工具 ────────────────────────────────────────────────
-  function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }
-  function escapeHtml(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  }
-  function escapeAttr(s) { return escapeHtml(s).replace(/[^a-zA-Z0-9_-]/g, "_"); }
 
   // ── 按钮 ────────────────────────────────────────────────
-  // "知道了"：清掉当前窗口未读 → 熄辉光。若还有别的窗口未读就轮换过去，否则收起待命。
+  // 缩小：抑制弹窗 → 关闭窗口
+  el("btnMin").onclick = function () {
+    send({ type: "popup_suppress" });
+    setTimeout(function () { window.close(); }, 300);
+  };
+
+  // "知道了"：清除当前未读 → 回列表
   el("btnOk").onclick = function () {
     delete state.unread[state.current];
+    el("card").classList.remove("unread");
+
     var pending = 0;
     for (var k in state.unread) { if (state.unread.hasOwnProperty(k) && state.unread[k]) pending++; }
-    if (pending > 0) { cycleUnread(); }
-    else { el("card").classList.remove("unread"); collapse(); }
-    render();
+
+    if (pending > 0) {
+      showList();
+    } else {
+      state.mode = "collapsed";
+      renderCollapsed();
+    }
   };
-  el("more").onclick = cycleUnread;
+
+  // "返回列表"按钮
+  el("btnList").onclick = showList;
+
   el("btnCopy").onclick = function () {
     var text = currentPlainText();
     var done = function () {
@@ -272,10 +328,36 @@
       } catch (e) { /* ignore */ }
     }
   };
-  // 双击头部展开/收起
+
+  function currentPlainText() {
+    var w = state.windows[state.current];
+    if (!w) return "";
+    return w.lastPersona || w.lastText || "";
+  }
+
+  // 双击头部回列表
   el("head").addEventListener("dblclick", function () {
-    el("card").classList.toggle("collapsed");
+    if (state.mode === "detail") showList();
+    else if (state.mode === "list" && state.current) showDetail(state.current);
   });
+
+  // ── 视觉提示 ────────────────────────────────────────────
+  function pulse() {
+    var card = el("card");
+    card.classList.remove("pulse");
+    void card.offsetWidth;
+    card.classList.add("pulse");
+  }
+  function expand() { el("card").classList.remove("collapsed"); }
+
+  // ── 工具 ────────────────────────────────────────────────
+  function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function escapeAttr(s) { return escapeHtml(s).replace(/[^a-zA-Z0-9_-]/g, "_"); }
 
   connect();
 })();

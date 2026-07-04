@@ -9,7 +9,7 @@
   </head>
   <body>
     <div id="card" class="card collapsed">
-      <!-- 头部：拖拽区 + 项目名 + 时间 + 收起/关闭 -->
+      <!-- 头部：拖拽区 + 标题 + 未读标签 + 连接 -->
       <header id="head">
         <span class="logo">⌘</span>
         <span class="proj" id="proj">majordomo</span>
@@ -17,33 +17,43 @@
         <span class="spacer"></span>
         <span class="time" id="time"></span>
         <span class="conn" id="conn" title="与中枢的连接"></span>
+        <button id="btnMin" class="btn-min" title="缩小弹窗（不再自动弹出）">−</button>
       </header>
 
-      <!-- CG 横幅 16:9（无匹配时隐藏） -->
-      <div class="cg-banner" id="cgBanner">
-        <img class="cg-banner-img" id="cgBannerImg" src="" alt="" />
+      <!-- 列表视图 -->
+      <div id="listWrap" class="list-wrap">
+        <div id="windowList"></div>
       </div>
 
-      <!-- persona 全文（markdown 渲染） -->
-      <section class="persona" id="personaWrap">
-        <div class="who" id="who">中枢</div>
-        <div class="persona-row">
-          <img class="standing" id="standing" src="" alt="" />
-          <div class="body" id="persona"></div>
+      <!-- 详情视图 -->
+      <div id="detailWrap" class="detail-wrap" style="display:none">
+        <!-- CG 横幅 16:9 -->
+        <div class="cg-banner" id="cgBanner">
+          <img class="cg-banner-img" id="cgBannerImg" src="" alt="" />
         </div>
-      </section>
 
-      <!-- 本轮活动 mini 流 -->
-      <section class="acts" id="actsWrap">
-        <div class="acts-head">本轮活动</div>
-        <div id="acts"></div>
-      </section>
+        <!-- persona 全文 -->
+        <section class="persona" id="personaWrap">
+          <div class="who" id="who">中枢</div>
+          <div class="persona-row">
+            <img class="standing" id="standing" src="" alt="" />
+            <div class="body" id="persona"></div>
+          </div>
+        </section>
 
-      <!-- 底部按钮 -->
-      <footer>
-        <button id="btnOk" class="primary">知道了</button>
-        <button id="btnCopy">复制</button>
-      </footer>
+        <!-- 本轮活动 mini 流 -->
+        <section class="acts" id="actsWrap">
+          <div class="acts-head">本轮活动</div>
+          <div id="acts"></div>
+        </section>
+
+        <!-- 底部按钮 -->
+        <footer>
+          <button id="btnList" title="返回列表">←</button>
+          <button id="btnOk" class="primary">知道了</button>
+          <button id="btnCopy">复制</button>
+        </footer>
+      </div>
     </div>
 
     <script>
