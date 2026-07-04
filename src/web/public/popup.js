@@ -102,10 +102,48 @@
     state.current = windowId;
     if (alert) state.unread[windowId] = true;
     render();
+    loadStanding(windowId);
     if (alert) {
       expand();
       pulse();
     }
+  }
+
+  // ── 立绘 / CG ──────────────────────────────────────────
+  function loadStanding(windowId) {
+    var w = state.windows[windowId];
+    var name = state.personaName || (w && w.title) || "";
+
+    // 立绘
+    var sImg = el("standing");
+    var sSrc = assetUrl("standing", name);
+    loadImg(sImg, sSrc);
+
+    // CG 横幅
+    var cBanner = el("cgBanner");
+    var cImg = el("cgBannerImg");
+    var cSrc = assetUrl("cg", name);
+    if (cSrc) {
+      cImg.onload = function () { cBanner.classList.add("show"); };
+      cImg.onerror = function () { cBanner.classList.remove("show"); cImg.src = ""; };
+      cImg.src = cSrc;
+    } else {
+      cBanner.classList.remove("show");
+      cImg.src = "";
+    }
+  }
+
+  function assetUrl(kind, name) {
+    if (!name) return "";
+    var safe = String(name).replace(/[^a-zA-Z0-9一-鿿_-]/g, "_");
+    return "assets/" + kind + "/" + safe + ".png";
+  }
+
+  function loadImg(el, src) {
+    if (!src) { el.classList.remove("loaded"); el.src = ""; return; }
+    el.onload = function () { el.classList.add("loaded"); };
+    el.onerror = function () { el.classList.remove("loaded"); el.src = ""; };
+    el.src = src;
   }
 
   // ── 渲染 ────────────────────────────────────────────────

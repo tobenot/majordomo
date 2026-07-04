@@ -24,8 +24,9 @@
       <aside id="sidebar">
         <div class="sidebar-head"><span>窗口 <span id="winCount" class="count">0</span></span></div>
         <ul id="windowList"></ul>
-        <div class="cg-frame" title="立绘 / CG 占位（后续迭代）">
-          <div class="cg-placeholder">立绘 / CG<br /><small>后续迭代</small></div>
+        <div class="cg-frame" id="cgFrame">
+          <img class="cg-img" id="cgImg" src="" alt="" />
+          <div class="cg-empty" id="cgEmpty">16:9 CG<br /><small>assets/cg/{窗口名}.png</small></div>
         </div>
       </aside>
 
@@ -35,7 +36,15 @@
           <span id="detailTitle">选一个窗口看它在做什么</span>
           <span id="detailState" class="badge"></span>
         </div>
-        <div id="personaBox" class="persona-box hidden"></div>
+        <div id="personaBox" class="persona-box hidden">
+          <div class="persona-row">
+            <img class="standing-panel" id="standingPanel" src="" alt="" />
+            <div class="persona-col">
+              <div class="who" id="personaWho">中枢</div>
+              <div class="body md" id="personaBody"></div>
+            </div>
+          </div>
+        </div>
         <div id="activity" class="activity"></div>
       </section>
 

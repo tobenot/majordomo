@@ -144,6 +144,27 @@
     state.current = id;
     renderWindows();
     renderDetail();
+    loadImages(id);
+  }
+
+  // ── 立绘 / CG ──────────────────────────────────────────
+  function assetUrl(kind, name) {
+    if (!name) return "";
+    var safe = String(name).replace(/[^a-zA-Z0-9一-鿿_-]/g, "_");
+    return "assets/" + kind + "/" + safe + ".png";
+  }
+
+  function loadImg(el, src) {
+    if (!src) { el.classList.remove("loaded"); el.src = ""; return; }
+    el.onload = function () { el.classList.add("loaded"); };
+    el.onerror = function () { el.classList.remove("loaded"); el.src = ""; };
+    el.src = src;
+  }
+
+  function loadImages(windowId) {
+    var name = state.personaName || "";
+    loadImg(el("cgImg"), assetUrl("cg", name));
+    loadImg(el("standingPanel"), assetUrl("standing", name));
   }
 
   function renderDetail() {
@@ -165,7 +186,8 @@
 
     if (w.lastPersona) {
       pBox.classList.remove("hidden");
-      pBox.innerHTML = '<div class="who">' + escapeHtml(state.personaName) + '</div><div class="body md">' + window.MjMarkdown.render(w.lastPersona) + "</div>";
+      el("personaWho").textContent = state.personaName;
+      el("personaBody").innerHTML = window.MjMarkdown.render(w.lastPersona);
     } else {
       pBox.classList.add("hidden");
     }

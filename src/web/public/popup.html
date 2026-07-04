@@ -19,10 +19,18 @@
         <span class="conn" id="conn" title="与中枢的连接"></span>
       </header>
 
+      <!-- CG 横幅 16:9（无匹配时隐藏） -->
+      <div class="cg-banner" id="cgBanner">
+        <img class="cg-banner-img" id="cgBannerImg" src="" alt="" />
+      </div>
+
       <!-- persona 全文（markdown 渲染） -->
       <section class="persona" id="personaWrap">
         <div class="who" id="who">中枢</div>
-        <div class="body" id="persona"></div>
+        <div class="persona-row">
+          <img class="standing" id="standing" src="" alt="" />
+          <div class="body" id="persona"></div>
+        </div>
       </section>
 
       <!-- 本轮活动 mini 流 -->
