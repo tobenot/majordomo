@@ -13,6 +13,7 @@ export const MIME: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".webp": "image/webp",
 };
 
 /** 静态资源目录：优先 dist/web/public（构建产物），回退 src/web/public（开发期）。 */

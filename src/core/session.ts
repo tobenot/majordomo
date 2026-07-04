@@ -7,6 +7,12 @@ import { createLogger } from "./logger";
 
 const log = createLogger("session");
 
+/** ponytail: 头尾各取 n 字符，中间截断处插 "…" 标记。短于 2n 直接返回原文。 */
+function headTail(s: string, n: number): string {
+  if (!s || s.length <= n * 2) return s;
+  return s.slice(0, n) + "\n…\n" + s.slice(-n);
+}
+
 /**
  * 单个会话的生命周期编排：把工作层的结构化事件，经人设层润色，向上抛成协议消息。
  *
@@ -151,11 +157,17 @@ export class Session extends EventEmitter {
   /** 工作层回合结束，让人设层把结果总结成人话。 */
   private async report(): Promise<void> {
     this.setState("reporting");
-    const workerText = this.workerTextBuf.join("\n").trim();
+    // ponytail: 只给 persona 工作层的"结论文字"——assistant 文本块（无 [xxx] 前缀），
+    // 跳过工具摘要/系统通知/进度等噪音。头尾各取 1000 字符——开头有上下文，结尾有结论，中间是噪音。
+    const rawText = this.workerTextBuf.join("\n").trim();
+    const assistantLines = this.workerTextBuf.filter((l) => !/^\[[^\]]+\]/.test(l));
+    const source = (assistantLines.join("\n").trim() || rawText);
+    const workerText = headTail(source, 1000);
+    const userText = headTail(this.currentUserText, 1000);
     let text: string;
     try {
       text = await this.persona.report({
-        userText: this.currentUserText,
+        userText,
         workerText,
         sessionName: this.info.name,
       });

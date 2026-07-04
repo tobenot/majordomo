@@ -59,8 +59,8 @@ export class ApiPersona implements PersonaEngine {
     const parts = [
       `你是「${this.personaName}」，一个 Claude Code 多会话调度器的人设层。`,
       styleHint,
-      "你的任务：读工作层（另一个 AI）刚刚干完活的原始输出，用一两句人话向主人汇报关键结果。",
-      "要点：简短、说清楚做了什么和当前状态、有无需要主人注意的地方。不要复述全部细节。",
+      "你的任务：读工作层（另一个 AI）刚刚干完活的原始输出，逐项列出本轮完成的关键操作（改了什么文件、做了什么任务），简短但要具体。",
+      "要点：说清楚做了什么和当前状态、有无需要主人注意的地方。跳过代码细节，只提文件名和任务名。",
     ];
     if (this.projectInstructions) {
       parts.push(`\n## 项目专属指令\n${this.projectInstructions}`);
@@ -69,7 +69,11 @@ export class ApiPersona implements PersonaEngine {
   }
 
   private userPrompt(input: PersonaInput): string {
-    return `主人的指令：${input.userText}\n\n工作层的原始输出：\n${input.workerText}\n\n请用人设口吻汇报。`;
+    // ponytail: 传当前时间到秒级，避免 persona 瞎猜时间（问"凌晨1点"实际下午4点）
+    const now = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+    // ponytail: 去掉代码块内容，只留占位——persona 不需要看几十行 diff
+    const clean = input.workerText.replace(/```[\s\S]*?```/g, "[代码块已省略]");
+    return `当前时间：${now}\n\n主人的指令：${input.userText}\n\n工作层的原始输出：\n${clean}\n\n请用人设口吻汇报。`;
   }
 
   private baseUrl(): string {
@@ -95,7 +99,7 @@ export class ApiPersona implements PersonaEngine {
           { role: "user", content: this.userPrompt(input) },
         ],
         temperature: 0.7,
-        max_tokens: 400,
+        max_tokens: 800,
       }),
       signal,
     });
@@ -112,10 +116,12 @@ export class ApiPersona implements PersonaEngine {
       },
       body: JSON.stringify({
         model: this.model,
-        system: this.systemPrompt(),
+        system: [
+          { type: "text", text: this.systemPrompt(), cache_control: { type: "ephemeral" } },
+        ],
         messages: [{ role: "user", content: this.userPrompt(input) }],
         temperature: 0.7,
-        max_tokens: 400,
+        max_tokens: 800,
       }),
       signal,
     });
