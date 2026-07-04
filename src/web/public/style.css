@@ -123,7 +123,18 @@ main { flex: 1; display: flex; min-height: 0; }
 /* ── 人设消息气泡流 ── */
 .persona-box {
   flex: 1; overflow-y: auto; padding: 14px 22px;
+  position: relative;
 }
+/* 立绘：9:16，右下角固定，无匹配时隐藏 */
+.standing-panel {
+  display: none; position: fixed; right: 24px; bottom: 24px; z-index: 10;
+  width: 80px; aspect-ratio: 9 / 16;
+  object-fit: contain; border-radius: 8px;
+  background: linear-gradient(180deg, #1a1a24, var(--bg));
+  border: 1px solid var(--border);
+  pointer-events: none;
+}
+.standing-panel.loaded { display: block; }
 .persona-msgs.empty {
   color: var(--text2); font-size: 13px; padding: 20px 0; text-align: center;
 }
@@ -231,3 +242,11 @@ main { flex: 1; display: flex; min-height: 0; }
 .acc-done { color: var(--green); }
 
 .hidden { display: none !important; }
+
+/* ── 蜂蜜滚动条 ── */
+.persona-box, #windowList, .activity, .rail-list { scrollbar-color: var(--honey) var(--panel2); }
+.persona-box::-webkit-scrollbar, #windowList::-webkit-scrollbar, .activity::-webkit-scrollbar, .rail-list::-webkit-scrollbar { width: 6px; }
+.persona-box::-webkit-scrollbar-track, #windowList::-webkit-scrollbar-track, .activity::-webkit-scrollbar-track, .rail-list::-webkit-scrollbar-track { background: var(--panel2); }
+.persona-box::-webkit-scrollbar-thumb, #windowList::-webkit-scrollbar-thumb, .activity::-webkit-scrollbar-thumb, .rail-list::-webkit-scrollbar-thumb { background: var(--honey); border-radius: 3px; }
+.persona-box::-webkit-scrollbar-thumb:hover, #windowList::-webkit-scrollbar-thumb:hover, .activity::-webkit-scrollbar-thumb:hover, .rail-list::-webkit-scrollbar-thumb:hover,
+.persona-box::-webkit-scrollbar-thumb:active, #windowList::-webkit-scrollbar-thumb:active, .activity::-webkit-scrollbar-thumb:active, .rail-list::-webkit-scrollbar-thumb:active { background: var(--honey-light); }

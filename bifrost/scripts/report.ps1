@@ -257,6 +257,11 @@ function Invoke-FullNotify {
     switch ([string]$cfg.popup) {
         'none' { Invoke-WinFormsNotify $message -NoPopup; return }
         'winforms' { Invoke-WinFormsNotify $message; return }
+        'both' {
+            # web popup + WinForms popup both
+            if (Ensure-WebPopup) { Invoke-WinFormsNotify $message }
+            else { Invoke-WinFormsNotify $message }
+        }
         default {
             # 'web' (default)
             if (Ensure-WebPopup) { Invoke-WinFormsNotify $message -NoPopup }
