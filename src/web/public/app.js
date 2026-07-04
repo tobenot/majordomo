@@ -64,6 +64,8 @@
         state.assetNames = msg.assetNames || [];
         el("personaName").textContent = msg.personaName;
         el("engineBadge").textContent = "人设: " + msg.personaName;
+        var label = el("sidebarLabel");
+        if (label) label.textContent = msg.personaName;
         break;
       case "hub_snapshot":
         state.windows = msg.snapshot.windows || [];
@@ -310,6 +312,10 @@
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
+
+  // 恢复弹窗
+  var btnRestore = el("btnPopupRestore");
+  if (btnRestore) btnRestore.onclick = function () { send({ type: "popup_restore" }); };
 
   connect();
 })();

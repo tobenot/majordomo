@@ -19,6 +19,12 @@ param(
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+# 抑制标记：主面板点了"缩小弹窗"后会写这个文件，存在则不再自动拉起。
+# 用户从主面板点"恢复弹窗"时 daemon 会删标记 + spawn 此脚本。
+$mjHome = if ($env:MAJORDOMO_HOME) { $env:MAJORDOMO_HOME } else { Join-Path $env:USERPROFILE '.majordomo' }
+$suppressFile = Join-Path $mjHome 'popup.suppress'
+if (Test-Path $suppressFile) { exit 0 }
+
 # --- Win32 interop: find a top-level window by title, pin it topmost without stealing focus ---
 $sig = @'
 using System;
@@ -29,11 +35,14 @@ public class MjWin {
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr h);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
     public delegate bool EnumProc(IntPtr h, IntPtr p);
 
     static IntPtr HWND_TOPMOST = new IntPtr(-1);
     const uint SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040;
+    const int SW_RESTORE = 9;
 
     public static IntPtr Find(string needle) {
         IntPtr found = IntPtr.Zero;
@@ -43,7 +52,8 @@ public class MjWin {
             if (len <= 0) return true;
             StringBuilder sb = new StringBuilder(len + 1);
             GetWindowText(h, sb, sb.Capacity);
-            if (sb.ToString().IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0) {
+            // ponytail: exact match — "majordomo" != "majordomo · 中枢" (Chrome web panel)
+            if (string.Equals(sb.ToString(), needle, StringComparison.OrdinalIgnoreCase)) {
                 found = h; return false;
             }
             return true;
@@ -51,8 +61,10 @@ public class MjWin {
         return found;
     }
 
-    // Pin on top but do NOT activate -- the popup must never steal your keyboard focus.
-    public static void Pin(IntPtr h) {
+    // ponytail: restore from minimized before pinning; SW_RESTORE is no-op if already visible.
+    // SWP_NOACTIVATE keeps keyboard focus where the user left it.
+    public static void RestoreAndPin(IntPtr h) {
+        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
         SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 }
@@ -62,7 +74,7 @@ try { Add-Type -TypeDefinition $sig -Language CSharp -ErrorAction Stop } catch {
 function Pin-IfPresent {
     try {
         $h = [MjWin]::Find($TitleMatch)
-        if ($h -ne [IntPtr]::Zero) { [MjWin]::Pin($h); return $true }
+        if ($h -ne [IntPtr]::Zero) { [MjWin]::RestoreAndPin($h); return $true }
     } catch { }
     return $false
 }

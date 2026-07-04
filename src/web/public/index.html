@@ -14,6 +14,7 @@
         <span class="subtitle" id="personaName">中枢</span>
       </div>
       <div class="status">
+        <button id="btnPopupRestore" title="恢复弹窗">弹窗</button>
         <span id="connState" class="badge off">未连接</span>
         <span id="engineBadge" class="badge"></span>
       </div>
@@ -22,7 +23,7 @@
     <main>
       <!-- ① 窗口列表 -->
       <aside id="sidebar">
-        <div class="sidebar-head"><span>窗口 <span id="winCount" class="count">0</span></span></div>
+        <div class="sidebar-head"><span id="sidebarLabel">窗口</span> <span id="winCount" class="count">0</span></div>
         <ul id="windowList"></ul>
         <div class="cg-frame" id="cgFrame">
           <img class="cg-img" id="cgImg" src="" alt="" />
@@ -36,7 +37,9 @@
           <span id="detailTitle">选一个窗口看它在做什么</span>
           <span id="detailState" class="badge"></span>
         </div>
-        <div id="personaBox" class="persona-box"></div>
+        <div id="personaBox" class="persona-box">
+          <img class="standing-panel" id="standingPanel" src="" alt="" />
+        </div>
         <details id="activityWrap" class="activity-wrap">
           <summary>原始事件 (<span id="actCount">0</span>)</summary>
           <div id="activity" class="activity"></div>

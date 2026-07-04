@@ -40,6 +40,11 @@ export function hubStorePath(name: "windows" | "todos" | "acceptance"): string {
   return path.join(globalDir(), `hub-${name}.json`);
 }
 
+/** 弹窗抑制标记：存在则 popup-web.ps1 不自动拉起。 */
+export function popupSuppressPath(): string {
+  return path.join(globalDir(), "popup.suppress");
+}
+
 /** 项目级 .majordomo/ 数据目录。可用 MAJORDOMO_PROJECT_DIR 覆盖。 */
 export function projectDir(root: string = process.cwd()): string {
   return process.env.MAJORDOMO_PROJECT_DIR

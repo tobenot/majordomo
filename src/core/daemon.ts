@@ -1,5 +1,7 @@
 import * as path from "path";
 import * as http from "http";
+import * as fs from "fs";
+import * as cp from "child_process";
 import { WebSocketServer, WebSocket } from "ws";
 import { Config, resolveProfile, persistActiveProfile } from "./config";
 import { Store } from "./store";
@@ -13,6 +15,7 @@ import { createHookFactory } from "../hooks/factory";
 import { HubService } from "../hub/hub";
 import { IngestEnvelope } from "../hub/types";
 import { resolvePublicDir, browserWsUrlFor, readAsset } from "../web/staticAssets";
+import { popupSuppressPath } from "./paths";
 import { createLogger } from "./logger";
 
 const log = createLogger("daemon");
@@ -277,7 +280,30 @@ export class CoreDaemon {
       case "acceptance_resolve":
         this.hub.resolveAcceptance(msg.id);
         break;
+
+      case "popup_suppress":
+        try { fs.writeFileSync(popupSuppressPath(), "", "utf-8"); } catch { /* best-effort */ }
+        log.info("弹窗已抑制（popup.suppress 写入）");
+        break;
+
+      case "popup_restore":
+        try { fs.unlinkSync(popupSuppressPath()); } catch { /* not exist, fine */ }
+        this.spawnPopup();
+        break;
     }
+  }
+
+  private spawnPopup(): void {
+    const script = path.join(this.projectRoot, "bifrost", "scripts", "popup-web.ps1");
+    if (!fs.existsSync(script)) { log.warn("popup-web.ps1 不存在，跳过拉起弹窗"); return; }
+    const popupUrl = `http://${this.cfg.host}:${this.cfg.port}/popup.html`;
+    try {
+      cp.spawn("powershell.exe", [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+        "-File", script, "-Url", popupUrl,
+      ], { detached: true, stdio: "ignore", shell: false });
+      log.info("弹窗已恢复（spawn popup-web.ps1）");
+    } catch (e) { log.warn(`拉起弹窗失败: ${(e as Error).message}`); }
   }
 
   private sendTo(ws: WebSocket, msg: ServerMessage): void {
