@@ -19,16 +19,9 @@ export class TemplatePersona implements PersonaEngine {
 
     const kaomoji = pick(["(≧▽≦)", "ฅ^•ﻌ•^ฅ", "(ノ´ヮ`)ノ*:・゚✧", "(´・ω・`)", "(｡♥‿♥｡)"]);
 
-    const base = brief
-      ? `主人，本喵汇报一下喵～ 工作层处理了「${truncate(input.userText, 40)}」，结果是：${brief}`
-      : `主人～ 这一轮工作层没有产出可汇报的内容呢，咱再看看`;
-    return `${base} ${kaomoji}`;
+    // ponytail: 透传 worker 原文首句 + kaomoji。API 才是滋润层的正道，模板只兜底。
+    return brief ? `${brief} ${kaomoji}` : `主人～ 这一轮工作层没有产出可汇报的内容呢 ${kaomoji}`;
   }
-}
-
-function truncate(s: string, n: number): string {
-  s = (s ?? "").trim();
-  return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
 function pick<T>(arr: T[]): T {

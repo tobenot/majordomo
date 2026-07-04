@@ -170,8 +170,8 @@ export class HubService {
         workerText,
         sessionName: w.title,
       });
-      this.windows.setPersona(w.windowId, text);
-      this.broadcast({ type: "window_persona", windowId: w.windowId, text });
+      this.windows.addPersona(w.windowId, text);
+      this.broadcast({ type: "window_persona", windowId: w.windowId, text, personaMessages: w.personaMessages });
       void this.notifier.notify(`[${w.title}] ${text}`);
       // 链路诊断：确认 persona→notifier 真的走通（跑真窗口时看这行判断弹窗是否该弹）
       log.info(`persona 复命 → notifier [${w.title}]: ${summarize(text)}`);

@@ -78,7 +78,7 @@
         markOffline(msg.windowId);
         break;
       case "window_persona":
-        applyPersona(msg.windowId, msg.text);
+        applyPersona(msg.windowId, msg.text, msg.personaMessages);
         break;
       case "todos":
         state.todos = msg.todos || [];
@@ -110,9 +110,11 @@
     if (state.current === id) renderDetail();
   }
 
-  function applyPersona(id, text) {
+  function applyPersona(id, text, personaMessages) {
     const w = state.windows.find((x) => x.windowId === id);
-    if (w) w.lastPersona = text;
+    if (!w) return;
+    w.lastPersona = text;
+    if (personaMessages) w.personaMessages = personaMessages;
     if (state.current === id) renderDetail();
     renderWindows();
   }
@@ -135,7 +137,7 @@
         '</div><div class="s-meta">' +
         (STATE_LABEL[w.state] || w.state) +
         " · " +
-        escapeHtml(oneLine(w.lastPersona || w.lastText || "", 40)) +
+        escapeHtml(oneLine(w.lastSummary || w.lastText || "", 60)) +
         "</div>";
       li.onclick = () => selectWindow(w.windowId);
       ul.appendChild(li);
@@ -177,13 +179,14 @@
   function renderDetail() {
     const w = state.windows.find((x) => x.windowId === state.current);
     const pBox = el("personaBox");
+    const actWrap = el("activityWrap");
     const act = el("activity");
     if (!w) {
       el("detailTitle").textContent = "选一个窗口看它在做什么";
       el("detailState").textContent = "";
       el("detailState").className = "badge";
-      pBox.classList.add("hidden");
-      act.innerHTML = "";
+      pBox.innerHTML = "";
+      actWrap.classList.add("hidden");
       return;
     }
     el("detailTitle").textContent = w.title + "  ·  " + w.cwd;
@@ -191,24 +194,45 @@
     sb.textContent = STATE_LABEL[w.state] || w.state;
     sb.className = "badge state-" + w.state;
 
-    if (w.lastPersona) {
-      pBox.classList.remove("hidden");
-      el("personaWho").textContent = state.personaName;
-      el("personaBody").innerHTML = window.MjMarkdown.render(w.lastPersona);
+    // 人设消息历史（气泡流，最早在上，最新在下）
+    var msgs = w.personaMessages || [];
+    if (msgs.length) {
+      var html = '<div class="persona-msgs">';
+      for (var i = 0; i < msgs.length; i++) {
+        html +=
+          '<div class="persona-bubble">' +
+          '<div class="persona-bubble-head">' +
+          '<span class="persona-who">' + escapeHtml(state.personaName) + '</span>' +
+          '<span class="persona-ts">' + fmtTime(msgs[i].ts) + '</span>' +
+          '</div>' +
+          '<div class="persona-bubble-body md">' + window.MjMarkdown.render(msgs[i].text) + '</div>' +
+          '</div>';
+      }
+      html += '</div>';
+      pBox.innerHTML = html;
     } else {
-      pBox.classList.add("hidden");
+      pBox.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';
     }
 
-    act.innerHTML = "";
-    (w.activity || []).slice().reverse().forEach((a) => {
-      const row = document.createElement("div");
-      row.className = "act-row";
-      row.innerHTML =
-        '<span class="act-ts">' + fmtTime(a.ts) + '</span>' +
-        '<span class="act-ev ev-' + escapeHtml(a.event) + '">' + escapeHtml(a.event) + "</span>" +
-        '<span class="act-sum">' + escapeHtml(a.summary) + "</span>";
-      act.appendChild(row);
-    });
+    // Activity 日志（折叠）
+    var acts = (w.activity || []).slice().reverse();
+    if (acts.length) {
+      actWrap.classList.remove("hidden");
+      el("actCount").textContent = acts.length;
+      act.innerHTML = "";
+      for (var j = 0; j < acts.length; j++) {
+        var a = acts[j];
+        var row = document.createElement("div");
+        row.className = "act-row";
+        row.innerHTML =
+          '<span class="act-ts">' + fmtTime(a.ts) + '</span>' +
+          '<span class="act-ev ev-' + escapeHtml(a.event) + '">' + escapeHtml(a.event) + "</span>" +
+          '<span class="act-sum">' + escapeHtml(a.summary) + "</span>";
+        act.appendChild(row);
+      }
+    } else {
+      actWrap.classList.add("hidden");
+    }
   }
 
   // ── ② 待办 ────────────────────────────────────────────

@@ -42,8 +42,8 @@ export interface HistoryEntry {
 }
 
 // ── 中枢三张表（见 hub/types.ts，此处 re-export 供前端协议引用） ──
-import type { WindowInfo, TodoItem, AcceptanceItem, HubSnapshot } from "../hub/types";
-export type { WindowInfo, TodoItem, AcceptanceItem, HubSnapshot } from "../hub/types";
+import type { WindowInfo, TodoItem, AcceptanceItem, HubSnapshot, PersonaMessage } from "../hub/types";
+export type { WindowInfo, TodoItem, AcceptanceItem, HubSnapshot, PersonaMessage } from "../hub/types";
 
 // ─────────────────────────────────────────────────────────────
 // Client → Core
@@ -93,7 +93,7 @@ export type ServerMessage =
   | { type: "window_update"; window: WindowInfo }
   | { type: "window_offline"; windowId: string }
   /** 逐窗口人设复命（中枢的"嘴"），面板挂到对应窗口 */
-  | { type: "window_persona"; windowId: string; text: string }
+  | { type: "window_persona"; windowId: string; text: string; personaMessages?: PersonaMessage[] }
   /** 全局待办变更（全量重推，v1 量小无妨） */
   | { type: "todos"; todos: TodoItem[] }
   /** 待验收清单变更（全量重推） */

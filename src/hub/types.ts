@@ -46,6 +46,12 @@ export interface WindowActivity {
   summary: string;
 }
 
+/** 一条人设复命。 */
+export interface PersonaMessage {
+  ts: number;
+  text: string;
+}
+
 export interface WindowInfo {
   windowId: string;
   cwd: string;
@@ -55,8 +61,12 @@ export interface WindowInfo {
   lastEvent: IngestEvent;
   /** 最近一次 assistant 文本摘要 */
   lastText: string;
-  /** 最近一次人设复命（人话） */
+  /** 最近一次人设复命（人话）——便利字段，取 personaMessages 最后一条 */
   lastPersona?: string;
+  /** 人设复命历史，环形缓冲。列表预览用 lastSummary，详情面板渲染这个数组。 */
+  personaMessages: PersonaMessage[];
+  /** worker stop 事件的原文摘要（summarize 首句），列表预览用。 */
+  lastSummary: string;
   /** 事件流环形缓冲，保留最近 N 条 */
   activity: WindowActivity[];
   onlineSince: number;

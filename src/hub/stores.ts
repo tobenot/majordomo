@@ -65,6 +65,7 @@ class JsonArrayStore<T> {
 const PRUNE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ACTIVITY_KEEP = 30;
+const PERSONA_KEEP = 50;
 
 /** ① 每个窗口做了什么。state 由事件推导。 */
 export class WindowRegistry extends JsonArrayStore<WindowInfo> {
@@ -101,12 +102,17 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
         state: opts.state,
         lastEvent: opts.event,
         lastText: opts.lastText ?? "",
+        lastSummary: "",
+        personaMessages: [],
         activity: [],
         onlineSince: now,
         updatedAt: now,
       };
       this.map.set(opts.windowId, w);
     }
+    // 旧数据兼容：无 personaMessages / lastSummary 的窗口补齐
+    if (!w.personaMessages) w.personaMessages = [];
+    if (w.lastSummary === undefined) w.lastSummary = "";
     if (opts.cwd) {
       w.cwd = opts.cwd;
       w.title = titleOf(opts.cwd);
@@ -114,6 +120,8 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
     w.state = opts.state;
     w.lastEvent = opts.event;
     if (opts.lastText !== undefined && opts.lastText !== "") w.lastText = opts.lastText;
+    // stop 事件的 summary 就是 worker 原文首句 → 列表预览用
+    if (opts.summary) w.lastSummary = opts.summary;
     w.updatedAt = now;
     const act: WindowActivity = { ts: now, event: opts.event, summary: opts.summary };
     w.activity.push(act);
@@ -122,10 +130,12 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
     return w;
   }
 
-  setPersona(windowId: string, text: string): WindowInfo | undefined {
+  addPersona(windowId: string, text: string): WindowInfo | undefined {
     const w = this.map.get(windowId);
     if (!w) return undefined;
     w.lastPersona = text;
+    w.personaMessages.push({ ts: Date.now(), text });
+    if (w.personaMessages.length > PERSONA_KEEP) w.personaMessages.splice(0, w.personaMessages.length - PERSONA_KEEP);
     w.updatedAt = Date.now();
     this.persist();
     return w;

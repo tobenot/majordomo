@@ -36,16 +36,11 @@
           <span id="detailTitle">选一个窗口看它在做什么</span>
           <span id="detailState" class="badge"></span>
         </div>
-        <div id="personaBox" class="persona-box hidden">
-          <div class="persona-row">
-            <img class="standing-panel" id="standingPanel" src="" alt="" />
-            <div class="persona-col">
-              <div class="who" id="personaWho">中枢</div>
-              <div class="body md" id="personaBody"></div>
-            </div>
-          </div>
-        </div>
-        <div id="activity" class="activity"></div>
+        <div id="personaBox" class="persona-box"></div>
+        <details id="activityWrap" class="activity-wrap">
+          <summary>原始事件 (<span id="actCount">0</span>)</summary>
+          <div id="activity" class="activity"></div>
+        </details>
       </section>
 
       <!-- ②③ 全局待办 + 待验收 -->
