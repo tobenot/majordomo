@@ -73,16 +73,13 @@ header {
 header button, header .conn { -webkit-app-region: no-drag; }
 .logo { width: 18px; height: 18px; display: block; flex: none; filter: drop-shadow(0 0 4px rgba(77, 200, 240, 0.4)); }
 /* 头像圆章：立绘头部裁切，收起态也常驻——她一直在 */
-.avatar {
+.avatar-emoji {
   width: 26px; height: 26px; border-radius: 50%; flex: none;
-  object-fit: cover; object-position: center 12%;
-  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, #1e1a26, #1a1a24);
-  display: none;
+  border: 1px solid var(--border);
+  font-size: 15px; line-height: 1;
 }
-.avatar.loaded { display: block; }
-/* 头像在场时，SVG logo 让位 */
-.avatar.loaded ~ .logo { display: none; }
 .proj { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .more {
   -webkit-app-region: no-drag; cursor: pointer; flex: none;
@@ -118,20 +115,6 @@ header button, header .conn { -webkit-app-region: no-drag; }
   padding: 24px 16px; text-align: center; color: var(--text2);
   font-style: italic; font-size: 14px;
 }
-/* 列表态右下角立绘 peek：她在角落探头，指针穿透 */
-.standing-peek {
-  position: fixed; right: -14px; bottom: 56px; z-index: 2;
-  width: 96px; aspect-ratio: 9 / 16; object-fit: cover;
-  object-position: top;
-  pointer-events: none; opacity: 0;
-  mask-image: linear-gradient(270deg, transparent 0%, black 28%, black 100%);
-  -webkit-mask-image: linear-gradient(270deg, transparent 0%, black 28%, black 100%);
-  filter: drop-shadow(-4px 6px 16px rgba(0,0,0,0.5)) drop-shadow(0 0 14px rgba(192,132,252,0.22));
-  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2,0.8,0.2,1);
-  transform: translateX(20px);
-}
-.standing-peek.loaded { opacity: 0.9; transform: translateX(0); }
-
 /* 窗口卡片 */
 .win-card {
   margin: 6px 10px; padding: 10px 12px;

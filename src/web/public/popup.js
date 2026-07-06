@@ -137,13 +137,8 @@
   }
 
   // ── 立绘 / CG ──────────────────────────────────────────
-  // 常驻美术：头像圆章（收起态也在）+ 列表态立绘 peek。用固定名，全程稳定。
-  function loadPersistentArt() {
-    var name = (state.assetNames && state.assetNames[0]) || state.personaName || "";
-    var standing = assetUrl("standing", name);
-    loadImg(el("avatar"), standing);
-    loadImg(el("standingPeek"), standing);
-  }
+  // ponytail: 小头像和 peek 用 emoji 替代，不再加载立绘裁切
+  function loadPersistentArt() {}
 
   function loadStanding(windowId) {
     var w = state.windows[windowId];

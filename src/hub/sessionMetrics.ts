@@ -30,7 +30,7 @@ export interface AssistantEntry {
 // ── 会话度量 ──
 export interface SessionMetrics {
   // 缓存健康
-  /** 累计加权 miss% = 1 - totalCacheReadTokens/totalInputTokens */
+  /** 累计加权 miss% = 1 - totalCacheReadTokens/(totalInputTokens+totalCacheReadTokens) */
   missPercent: number;
   /** 最近一段 Stop 的 miss% */
   lastSegmentMissPercent: number;
@@ -178,18 +178,21 @@ export function aggregateMetrics(input: AggregationInput): SessionMetrics {
   }
 
   // 本段 miss%（首轮必 miss，不计入——不然每个会话开头都拉高误报）
+  // ponytail: transcript 里 input_tokens 不含 cache_read，总 token = input + cache_read
   const skipFirst = !prev && entries.length > 0;
   const firstRound = skipFirst ? entries[0] : null;
   const missInput = segInput - (firstRound ? firstRound.inputTokens : 0);
   const missCache = segCacheRead - (firstRound ? firstRound.cacheReadTokens : 0);
-  const segMiss = missInput > 0 ? 1 - missCache / missInput : 0;
+  const segTotal = missInput + missCache;
+  const segMiss = segTotal > 0 ? 1 - missCache / segTotal : 0;
 
   // 累计 miss%（精确：直接用存储的累计值，不再用 maxSingleRoundInput 近似）
   const prevRounds = prev?.totalRounds ?? 0;
   const newRounds = prevRounds + entries.length;
   const cumInput = (prev?.totalInputTokens ?? 0) + missInput;
   const cumCache = (prev?.totalCacheReadTokens ?? 0) + missCache;
-  const cumMiss = cumInput > 0 ? 1 - cumCache / cumInput : 0;
+  const cumAllTokens = cumInput + cumCache;
+  const cumMiss = cumAllTokens > 0 ? 1 - cumCache / cumAllTokens : 0;
 
   // 累计 output
   const cumOutput = (prev?.cumulativeOutputTokens ?? 0) + segOutput;
