@@ -17,10 +17,10 @@ export class TemplatePersona implements PersonaEngine {
     const clean = workerText.replace(/\s+/g, " ").trim();
     const brief = clean.length > 240 ? clean.slice(0, 240) + "…" : clean;
 
-    const kaomoji = pick(["(≧▽≦)", "ฅ^•ﻌ•^ฅ", "(ノ´ヮ`)ノ*:・゚✧", "(´・ω・`)", "(｡♥‿♥｡)"]);
+    const kaomoji = pick(["(≧▽≦)", "ฅ^•ﻌ•^ฅ", "(ノ´ヮ`)ノ*:・゚✧", "(´・ω・`)", "(｡♥‿♥｡)", "(*´▽`*)", "(｡>﹏<｡)", "🐾✨"]);
 
-    // ponytail: 透传 worker 原文首句 + kaomoji。API 才是滋润层的正道，模板只兜底。
-    return brief ? `${brief} ${kaomoji}` : `主人～ 这一轮工作层没有产出可汇报的内容呢 ${kaomoji}`;
+    // ponytail: 模板兜底——开头直入工作内容，称呼放后面。
+    return brief ? `${brief} 喵~ ${kaomoji}` : `这一轮工作层没有产出可汇报的内容呢，主人～ ${kaomoji}`;
   }
 }
 
