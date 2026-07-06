@@ -15,7 +15,7 @@ Injected by majordomo worker layer via systemPrompt. Not part of CLAUDE.md.
 - Optionally run build after edits (ignore exit code 6)
 - After large changes, scan sibling/template files for needed sync
 - Diary and notifications are handled automatically by the hook system — do NOT invoke them manually
-- After every small feature or bugfix, stage and commit with a concise message. End with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- After every small feature or bugfix, stage and commit with a concise message.
 
 ### Must Ask First (thinking tasks)
 
