@@ -97,7 +97,7 @@ export class CoreDaemon {
       const wsUrl = browserWsUrlFor(this.cfg.host, this.cfg.port);
       const asset = readAsset(this.popupPublicDir, file, wsUrl);
       if (asset) {
-        res.writeHead(200, { "Content-Type": asset.contentType });
+        res.writeHead(200, { "Content-Type": asset.contentType, "Cache-Control": "no-cache" });
         res.end(asset.body);
       } else {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });

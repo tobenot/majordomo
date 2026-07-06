@@ -20,7 +20,7 @@ export function createHookFactory(deps: HookDependencies): (config: HookConfig) 
   return (config: HookConfig): Hook => {
     switch (config.type) {
       case "diary":
-        return new DiaryHook(deps.diaryDir);
+        return new DiaryHook(deps.diaryDir, path.join(deps.projectRoot, ".majordomo", "diary"));
       case "notify":
         return new NotifyHook(deps.notifier);
       case "shell": {
