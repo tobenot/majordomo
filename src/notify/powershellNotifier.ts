@@ -29,8 +29,6 @@ export class PowershellNotifier implements Notifier {
         "powershell.exe",
         [
           "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
           "-File",
           this.scriptPath,
           message,

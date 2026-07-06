@@ -216,7 +216,7 @@ function Invoke-WinFormsNotify {
         # Start-Process, so the worker running inline here costs one fewer PS cold-start
         # before the popup appears -- that hop was the popup lagging behind approval.
         $al = @(
-            '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden',
+            '-NoProfile','-WindowStyle','Hidden',
             '-File', "`"$notifier`"", '-Worker', '-Message', "`"$escaped`""
         )
         if ($NoPopup) { $al += '-NoPopup' }  # web popup owns the visual; reuse only sound/flash/TTS
@@ -243,7 +243,7 @@ function Ensure-WebPopup {
         $ingest = [Uri]$cfg.ingestUrl
         $popupUrl = "$($ingest.Scheme)://$($ingest.Authority)/popup.html"
         Start-Process powershell.exe -ArgumentList @(
-            '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden',
+            '-NoProfile','-WindowStyle','Hidden',
             '-File', "`"$launcher`"", '-Url', "`"$popupUrl`""
         ) -WindowStyle Hidden | Out-Null
     } catch { }

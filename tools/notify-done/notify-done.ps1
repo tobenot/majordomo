@@ -1,6 +1,6 @@
 ﻿# notify-done.ps1 - AI 工作交接提醒系统（非阻塞）
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File notify-done.ps1 ["message"] [-Volume 0-100] [-NoBeep] [-NoPopup]
+#   powershell -File notify-done.ps1 ["message"] [-Volume 0-100] [-NoBeep] [-NoPopup]
 #
 # 设计：
 # - 默认模式：立即拉起后台 worker 子进程并立刻退出（不阻塞调用方）
@@ -41,7 +41,6 @@ if (-not $Worker) {
 
             $argList = @(
                 "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
                 "-WindowStyle", "Hidden",
                 "-File", "`"$scriptPath`"",
                 "-Worker",
@@ -92,7 +91,6 @@ if (-not $NoBeep -and (Test-BeepLock)) {
                 if (-not (Test-Path $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
                 Start-Process powershell.exe -ArgumentList @(
                     "-NoProfile",
-                    "-ExecutionPolicy", "Bypass",
                     "-WindowStyle", "Hidden",
                     "-File", "`"$toneScript`"",
                     "-Volume", "$Volume",
@@ -107,7 +105,6 @@ if (-not $NoBeep -and (Test-BeepLock)) {
             # 有缓存：后台播放WAV文件（用SoundPlayer.Play异步播放）
             Start-Process powershell.exe -ArgumentList @(
                 "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
                 "-WindowStyle", "Hidden",
                 "-Command", "`$p = New-Object System.Media.SoundPlayer('$cachedWav'); `$p.Play(); Start-Sleep -Seconds 11"
             ) -WindowStyle Hidden | Out-Null
@@ -154,7 +151,6 @@ if (-not $NoPopup) {
             $escapedMessage = $Message -replace '"', '\"'
             Start-Process powershell.exe -ArgumentList @(
                 "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
                 "-WindowStyle", "Hidden",
                 "-File", "`"$popupScript`"",
                 "-Message", "`"$escapedMessage`""
@@ -176,7 +172,6 @@ try {
         Start-Sleep -Milliseconds 5000
         Start-Process powershell.exe -ArgumentList @(
             "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
             "-WindowStyle", "Hidden",
             "-File", "`"$ttsScript`"",
             "-Message", "`"$escapedMessage`"",
