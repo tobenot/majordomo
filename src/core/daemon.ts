@@ -36,8 +36,9 @@ export class CoreDaemon {
   private wss?: WebSocketServer;
   private clients = new Set<WebSocket>();
   private diaryDir: string;
-  /** 浮窗页从 daemon 自身端口直供，连同源 WS。仅这几个白名单路径，防目录穿越。 */
-  private static readonly POPUP_ASSETS = new Set(["/popup", "/popup.html", "/popup.js", "/popup.css", "/markdown.js"]);
+  /** 浮窗页从 daemon 自身端口直供，连同源 WS。readAsset 已防目录穿越。 */
+  private static readonly POPUP_PATHS = new Set(["/popup", "/popup.html", "/popup.js", "/popup.css", "/markdown.js"]);
+  private static readonly ASSET_PREFIX = "/assets/";
   private popupPublicDir = resolvePublicDir();
 
   constructor(private cfg: Config, private projectRoot: string = process.cwd()) {
@@ -91,8 +92,8 @@ export class CoreDaemon {
       return;
     }
 
-    // 浮窗页：daemon 自身端口直供，页面连同源 WS（就是这个端口）。白名单外一律 404。
-    if (req.method === "GET" && CoreDaemon.POPUP_ASSETS.has(urlPath)) {
+    // 浮窗页：daemon 自身端口直供，页面连同源 WS（就是这个端口）。
+    if (req.method === "GET" && (CoreDaemon.POPUP_PATHS.has(urlPath) || urlPath.startsWith(CoreDaemon.ASSET_PREFIX))) {
       const file = urlPath === "/popup" ? "/popup.html" : urlPath;
       const wsUrl = browserWsUrlFor(this.cfg.host, this.cfg.port);
       const asset = readAsset(this.popupPublicDir, file, wsUrl);

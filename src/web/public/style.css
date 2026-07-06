@@ -179,32 +179,36 @@ li.window-alert .dot {
   position: relative; z-index: 1;
   height: 100%; overflow-y: auto; padding: 16px 22px;
 }
-/* 立绘：9:16，右下角固定放大，柔光浮起，指针穿透 */
+/* 立绘：9:16，放在最新气泡左侧，感觉是她在说话 */
+.persona-bubble-last {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
 .standing-panel {
-  display: none; position: fixed; right: 22px; bottom: 20px; z-index: 5;
-  width: clamp(120px, 15vw, 240px); aspect-ratio: 9 / 16;
-  object-fit: contain;
+  display: none;
+  width: clamp(80px, 12vw, 180px); aspect-ratio: 9 / 16;
+  object-fit: contain; flex: none;
   filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 18px rgba(192, 132, 252, 0.18));
   pointer-events: none;
   opacity: 0.92;
   transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.5s, filter 0.5s;
   animation: standing-in 0.7s cubic-bezier(0.2, 0.9, 0.25, 1);
 }
+.persona-bubble-last .persona-bubble { flex: 1; min-width: 0; }
 .standing-panel.loaded { display: block; }
 @keyframes standing-in {
   0% { transform: translateY(28px); opacity: 0; }
   100% { transform: translateY(0); opacity: 0.92; }
 }
-/* 悬在她身上时轻轻浮起、更亮、彩虹翼辉光更盛 */
-.persona-box:hover .standing-panel.loaded {
+.standing-panel.loaded:hover {
   opacity: 1; transform: translateY(-6px) scale(1.02);
   filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 26px rgba(192, 132, 252, 0.32));
 }
 .persona-msgs.empty {
   color: var(--text2); font-size: 13px; padding: 20px 0; text-align: center;
 }
-/* 末条气泡留出空间，别被右下角立绘压住 */
-.persona-msgs { padding-bottom: 90px; }
+.persona-msgs { }
 .persona-bubble {
   margin-bottom: 14px;
   padding: 11px 15px; border-radius: 12px;

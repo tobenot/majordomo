@@ -179,7 +179,7 @@
   }
 
   function loadImg(el, src) {
-    if (!src) { el.classList.remove("loaded"); el.src = ""; return; }
+    if (!el || !src) { if (el) { el.classList.remove("loaded"); el.src = ""; } return; }
     el.onload = function () { el.classList.add("loaded"); };
     el.onerror = function () { el.classList.remove("loaded"); el.src = ""; };
     el.src = src;
@@ -198,7 +198,6 @@
     } else if (amb) {
       amb.style.backgroundImage = ""; amb.classList.remove("loaded");
     }
-    loadImg(el("standingPanel"), assetUrl("standing", name));
     loadImg(el("cgImg"), assetUrl("cg", name));
   }
 
@@ -225,7 +224,7 @@
     if (msgs.length) {
       var html = '<div class="persona-msgs">';
       for (var i = 0; i < msgs.length; i++) {
-        html +=
+        var bubbleHtml =
           '<div class="persona-bubble">' +
           '<div class="persona-bubble-head">' +
           '<span class="persona-who">' + escapeHtml(state.personaName) + '</span>' +
@@ -233,9 +232,19 @@
           '</div>' +
           '<div class="persona-bubble-body md">' + replaceEmoji(window.MjMarkdown.render(msgs[i].text)) + '</div>' +
           '</div>';
+        if (i === msgs.length - 1) {
+          html += '<div class="persona-bubble-last">';
+          html += '<img class="standing-panel" id="standingPanel" src="" alt="" />';
+          html += bubbleHtml;
+          html += '</div>';
+        } else {
+          html += bubbleHtml;
+        }
       }
       html += '</div>';
       pScroll.innerHTML = html;
+      var name = pickRandom(state.assetNames) || state.personaName || "";
+      loadImg(el("standingPanel"), assetUrl("standing", name));
     } else {
       pScroll.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';
     }
