@@ -161,6 +161,7 @@
 
   function selectWindow(id) {
     state.current = id;
+    state.assetName = pickRandom(state.assetNames) || state.personaName || "";
     renderWindows();
     renderDetail();
     loadImages(id);
@@ -186,7 +187,7 @@
   }
 
   function loadImages(windowId) {
-    var name = pickRandom(state.assetNames) || state.personaName || "";
+    var name = state.assetName || "";
     // CG 作为氛围底板：铺在人设消息区顶部，压暗渐隐
     var cgSrc = assetUrl("cg", name);
     var amb = el("cgAmbient");
@@ -243,7 +244,7 @@
       }
       html += '</div>';
       pScroll.innerHTML = html;
-      var name = pickRandom(state.assetNames) || state.personaName || "";
+      var name = state.assetName || "";
       loadImg(el("standingPanel"), assetUrl("standing", name));
     } else {
       pScroll.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';

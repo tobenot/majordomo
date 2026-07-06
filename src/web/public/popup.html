@@ -39,7 +39,9 @@
         <section class="persona" id="personaWrap">
           <div class="who" id="who">中枢</div>
           <div class="persona-row">
-            <img class="standing" id="standing" src="" alt="" />
+            <div class="standing-frame" id="standingFrame">
+              <img class="standing" id="standing" src="" alt="" />
+            </div>
             <div class="body" id="persona"></div>
           </div>
         </section>
@@ -49,8 +51,8 @@
 
         <!-- 本轮活动 mini 流 -->
         <section class="acts" id="actsWrap">
-          <div class="acts-head">本轮活动</div>
-          <div id="acts"></div>
+          <div class="acts-head" id="actsToggle">▶ 本轮活动 <span id="actCount"></span></div>
+          <div class="acts-body" id="actsBody"><div id="acts"></div></div>
         </section>
 
         <!-- 底部按钮 -->

@@ -149,9 +149,17 @@
     var w = state.windows[windowId];
     var name = pickRandom(state.assetNames) || state.personaName || (w && w.title) || "";
 
+    var sFrame = el("standingFrame");
     var sImg = el("standing");
     var sSrc = assetUrl("standing", name);
-    loadImg(sImg, sSrc);
+    if (sSrc) {
+      sImg.onload = function () { sFrame.classList.add("loaded"); };
+      sImg.onerror = function () { sFrame.classList.remove("loaded"); sImg.src = ""; };
+      sImg.src = sSrc;
+    } else {
+      sFrame.classList.remove("loaded");
+      sImg.src = "";
+    }
 
     var cBanner = el("cgBanner");
     var cImg = el("cgBannerImg");
@@ -270,17 +278,27 @@
     el("detailMetrics").style.display = m ? "" : "none";
 
     // 活动流
-    var acts = el("acts");
-    acts.innerHTML = "";
-    (w.activity || []).slice().reverse().slice(0, 12).forEach(function (a) {
+    var actsBody = el("acts");
+    actsBody.innerHTML = "";
+    var acts = (w.activity || []).slice().reverse().slice(0, 12);
+    acts.forEach(function (a) {
       var row = document.createElement("div");
       row.className = "act-row";
       row.innerHTML =
         '<span class="act-ts">' + fmtTime(a.ts) + "</span>" +
         '<span class="act-ev ev-' + escapeAttr(a.event) + '">' + escapeHtml(a.event) + "</span>" +
         '<span class="act-sum">' + escapeHtml(a.summary) + "</span>";
-      acts.appendChild(row);
+      actsBody.appendChild(row);
     });
+    el("actCount").textContent = acts.length > 0 ? "(" + acts.length + ")" : "";
+
+    // 首次渲染默认折叠活动区
+    if (!el("actsWrap").dataset.inited) {
+      el("actsWrap").classList.add("collapsed");
+      el("actsWrap").dataset.inited = "1";
+    }
+    var collapsed = el("actsWrap").classList.contains("collapsed");
+    el("actsToggle").textContent = (collapsed ? "▶" : "▼") + " 本轮活动" + actCountLabel();
 
     // 未读计数标签
     renderMore();
@@ -327,6 +345,19 @@
 
   // "返回列表"按钮
   el("btnList").onclick = showList;
+
+  // 活动折叠
+  el("actsToggle").onclick = function () {
+    el("actsWrap").classList.toggle("collapsed");
+    var collapsed = el("actsWrap").classList.contains("collapsed");
+    el("actsToggle").textContent = (collapsed ? "▶" : "▼") + " 本轮活动" + actCountLabel();
+  };
+
+  function actCountLabel() {
+    var w = state.windows[state.current];
+    var n = (w && w.activity ? w.activity.length : 0);
+    return n > 0 ? " (" + n + ")" : "";
+  }
 
   el("btnCopy").onclick = function () {
     var text = currentPlainText();

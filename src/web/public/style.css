@@ -157,22 +157,21 @@ li.window-alert .dot {
   flex: 1; overflow: hidden; padding: 0;
   position: relative;
 }
-/* CG 氛围底板：铺满、重压暗、向下渐隐到背景色。几乎看不见，只给"她在场"的暗示。 */
+/* CG 氛围底板：铺满、压暗、向下渐隐。给"她在场"的暗示。 */
 .cg-ambient {
   position: absolute; inset: 0; z-index: 0;
   background-size: cover; background-position: center 22%;
   opacity: 0; transition: opacity 0.8s ease;
   pointer-events: none;
-  /* 顶部留一点，越往下越透明，让文字始终清楚 */
-  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.18) 34%, transparent 62%);
-          mask-image: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.18) 34%, transparent 62%);
-  filter: saturate(0.9) brightness(0.5);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 40%, transparent 70%);
+          mask-image: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 40%, transparent 70%);
+  filter: saturate(0.85) brightness(0.65);
 }
 .cg-ambient.loaded { opacity: 1; }
 /* 压暗遮罩，压在 CG 上、文字下 */
 .cg-ambient::after {
   content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(13,13,16,0.35), rgba(13,13,16,0.72));
+  background: linear-gradient(180deg, rgba(13,13,16,0.25), rgba(13,13,16,0.65));
 }
 /* 真正滚动的消息层，浮在氛围底板之上 */
 .persona-scroll {
