@@ -99,7 +99,7 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
       w = {
         windowId: opts.windowId,
         cwd: opts.cwd,
-        title: titleOf(opts.cwd),
+        title: titleOf(opts.cwd, opts.windowId),
         state: opts.state,
         lastEvent: opts.event,
         lastText: opts.lastText ?? "",
@@ -116,7 +116,7 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
     if (w.lastSummary === undefined) w.lastSummary = "";
     if (opts.cwd) {
       w.cwd = opts.cwd;
-      w.title = titleOf(opts.cwd);
+      w.title = titleOf(opts.cwd, opts.windowId);
     }
     w.state = opts.state;
     w.lastEvent = opts.event;
@@ -295,9 +295,13 @@ export class AcceptanceStore extends JsonArrayStore<AcceptanceItem> {
   }
 }
 
-/** cwd 尾段作为窗口标题。见设计稿 §8 拍板 2。 */
-function titleOf(cwd: string): string {
-  if (!cwd) return "window";
-  const parts = cwd.replace(/[\\/]+$/, "").split(/[\\/]/);
-  return parts[parts.length - 1] || cwd;
+/** cwd 尾段 + windowId 短码作为窗口标题。同仓库多窗口靠后缀区分。 */
+function titleOf(cwd: string, windowId: string): string {
+  const base = (() => {
+    if (!cwd) return "window";
+    const parts = cwd.replace(/[\\/]+$/, "").split(/[\\/]/);
+    return parts[parts.length - 1] || cwd;
+  })();
+  const short = windowId.slice(0, 4);
+  return `${base} (${short})`;
 }

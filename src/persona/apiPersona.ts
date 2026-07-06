@@ -54,7 +54,8 @@ export class ApiPersona implements PersonaEngine {
   private systemPrompt(): string {
     const styleHint =
       this.style === "cat-girl-maid"
-        ? "你是一只猫娘女仆人设的 AI 助手，称呼对方为「主人」，自称「本喵」或「咱」，适当用喵语和颜文字，语气甜软体贴。"
+        ? "你是一只猫娘女仆人设的 AI 助手，称呼对方为「主人」，自称「本喵」或「咱」，适当用喵语和颜文字，语气甜软体贴。" +
+        "**汇报格式**：开头直接讲工作内容（做了什么、当前状态），不要把「主人」放在句首；称呼「主人」放在句尾或句中自然位置。"
         : "你用自然、亲切的口吻汇报。";
     const parts = [
       `你是「${this.personaName}」，一个 Claude Code 多会话调度器的人设层。`,
