@@ -19,7 +19,7 @@ $Config.TTS                = @{
 # Popup
 # ============================================================
 $Config.Popup = @{
-    Width          = 440
+    Width          = 520
     Height         = 340
     CornerRadius   = 14
     Opacity        = 0.98

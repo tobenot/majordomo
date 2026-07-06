@@ -34,6 +34,8 @@ $TextSnooze10 = Decode-Utf8Text "MTAg5YiG6ZKf5ZCO"
 $TextSnooze30 = Decode-Utf8Text "MzAg5YiG6ZKf5ZCO"
 $TextCopy = Decode-Utf8Text "5aSN5Yi2"
 $TextCopied = Decode-Utf8Text "5bey5aSN5Yi2"
+$TextCopyRec = Decode-Utf8Text "5aSN5Yi25o6o6I2Q"
+$TextCopiedRec = Decode-Utf8Text "5bey5aSN5Yi25o6o6I2Q"
 $TextOriginal = Decode-Utf8Text "5Y6fIA=="
 
 if ([string]::IsNullOrWhiteSpace($Message)) {
@@ -299,19 +301,19 @@ function Show-HandoffPopup {
     }
 
     $btnY = 276
-    $btnOk = New-RoundedButton -Text $TextOk -X 20 -Y $btnY -Width 110 -BgColor $btnPrimaryBg -HvColor $btnPrimaryHover -FgColor $white
+    $btnOk = New-RoundedButton -Text $TextOk -X 20 -Y $btnY -Width 100 -BgColor $btnPrimaryBg -HvColor $btnPrimaryHover -FgColor $white
     $btnOk.Add_Click({ $form.Tag = "dismiss"; $form.Close() })
     $form.Controls.Add($btnOk)
 
-    $btnSnooze10 = New-RoundedButton -Text $TextSnooze10 -X 140 -Y $btnY -Width 90 -BgColor $btnBg -HvColor $btnHover -FgColor $textPrimary
+    $btnSnooze10 = New-RoundedButton -Text $TextSnooze10 -X 128 -Y $btnY -Width 82 -BgColor $btnBg -HvColor $btnHover -FgColor $textPrimary
     $btnSnooze10.Add_Click({ $form.Tag = "snooze10"; $form.Close() })
     $form.Controls.Add($btnSnooze10)
 
-    $btnSnooze30 = New-RoundedButton -Text $TextSnooze30 -X 240 -Y $btnY -Width 90 -BgColor $btnBg -HvColor $btnHover -FgColor $textPrimary
+    $btnSnooze30 = New-RoundedButton -Text $TextSnooze30 -X 218 -Y $btnY -Width 82 -BgColor $btnBg -HvColor $btnHover -FgColor $textPrimary
     $btnSnooze30.Add_Click({ $form.Tag = "snooze30"; $form.Close() })
     $form.Controls.Add($btnSnooze30)
 
-    $btnCopy = New-RoundedButton -Text $TextCopy -X 340 -Y $btnY -Width 80 -BgColor $btnBg -HvColor $btnHover -FgColor $textPrimary
+    $btnCopy = New-RoundedButton -Text $TextCopy -X 308 -Y $btnY -Width 72 -BgColor $btnBg -HvColor $btnHover -FgColor $textPrimary
     # Store extra data for the click callback
     $btnCopy.Tag = @{
         Normal = $btnBg
@@ -339,6 +341,37 @@ function Show-HandoffPopup {
         $timer.Start()
     })
     $form.Controls.Add($btnCopy)
+
+    # 复制推荐回复按钮：提取 [推荐回复] 后的文本，单独复制
+    $recText = $PopupMessage
+    if ($PopupMessage -match '\[推荐回复\]\s*(.+?)(?:\r?\n|$)') {
+        $recText = $Matches[1].Trim()
+    }
+    $btnCopyRec = New-RoundedButton -Text $TextCopyRec -X 388 -Y $btnY -Width 112 -BgColor $btnBg -HvColor $btnHover -FgColor $textPrimary
+    $btnCopyRec.Tag = @{
+        Normal = $btnBg
+        Hover = $btnHover
+        CopyText = $TextCopyRec
+        CopiedText = $TextCopiedRec
+        Message = $recText
+    }
+    $btnCopyRec.Add_Click({
+        [System.Windows.Forms.Clipboard]::SetText($this.Tag.Message)
+        $this.Text = $this.Tag.CopiedText
+        $this.BackColor = $copiedBtnColor
+        $timer = New-Object System.Windows.Forms.Timer
+        $timer.Interval = 1500
+        $timer.Tag = $this
+        $timer.Add_Tick({
+            $btn = $this.Tag
+            $btn.Text = $btn.Tag.CopyText
+            $btn.BackColor = $btn.Tag.Normal
+            $this.Stop()
+            $this.Dispose()
+        })
+        $timer.Start()
+    })
+    $form.Controls.Add($btnCopyRec)
 
     $form.Opacity = 0
     $targetOpacity = $pc.Opacity
