@@ -312,16 +312,7 @@
   el("btnOk").onclick = function () {
     delete state.unread[state.current];
     el("card").classList.remove("unread");
-
-    var pending = 0;
-    for (var k in state.unread) { if (state.unread.hasOwnProperty(k) && state.unread[k]) pending++; }
-
-    if (pending > 0) {
-      showList();
-    } else {
-      state.mode = "collapsed";
-      renderCollapsed();
-    }
+    showList();
   };
 
   // "返回列表"按钮
