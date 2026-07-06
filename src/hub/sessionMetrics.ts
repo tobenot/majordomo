@@ -30,7 +30,7 @@ export interface AssistantEntry {
 // ── 会话度量 ──
 export interface SessionMetrics {
   // 缓存健康
-  /** 累计加权 miss% = 1 - cacheRead/(input) 的累计加权 */
+  /** 累计加权 miss% = 1 - totalCacheReadTokens/totalInputTokens */
   missPercent: number;
   /** 最近一段 Stop 的 miss% */
   lastSegmentMissPercent: number;
@@ -70,6 +70,12 @@ export interface SessionMetrics {
   maxTurnDurationMs: number;
   /** 工具报错次数 */
   toolErrorCount: number;
+
+  // 内部累计（保证 cumMiss 精确，不用 avgInput 近似）
+  /** 累计 input tokens（不含首轮） */
+  totalInputTokens: number;
+  /** 累计 cache_read tokens（不含首轮） */
+  totalCacheReadTokens: number;
 }
 
 /** 每个窗口在 transcript 文件里的读取位置 */
@@ -99,6 +105,8 @@ export const EMPTY_METRICS: SessionMetrics = {
   toolUseRatio: 0,
   maxTurnDurationMs: 0,
   toolErrorCount: 0,
+  totalInputTokens: 0,
+  totalCacheReadTokens: 0,
 };
 
 // ── 聚合 ────────────────────────────────────────────────────
@@ -170,20 +178,18 @@ export function aggregateMetrics(input: AggregationInput): SessionMetrics {
   }
 
   // 本段 miss%（首轮必 miss，不计入——不然每个会话开头都拉高误报）
-  const firstRound = prev ? null : entries[0];
+  const skipFirst = !prev && entries.length > 0;
+  const firstRound = skipFirst ? entries[0] : null;
   const missInput = segInput - (firstRound ? firstRound.inputTokens : 0);
   const missCache = segCacheRead - (firstRound ? firstRound.cacheReadTokens : 0);
   const segMiss = missInput > 0 ? 1 - missCache / missInput : 0;
 
-  // 累计
+  // 累计 miss%（精确：直接用存储的累计值，不再用 maxSingleRoundInput 近似）
   const prevRounds = prev?.totalRounds ?? 0;
   const newRounds = prevRounds + entries.length;
-  const prevInputSum = prev ? (prev.totalRounds * avgInput(prev)) : 0;
-  // ponytail: 累计 miss% 用简单加权。足够准，不必逐轮还原。
-  const totalInput = prevInputSum + missInput;
-  const prevCacheSum = prev ? prevInputSum * (1 - prev.missPercent) : 0;
-  const totalCache = prevCacheSum + missCache;
-  const cumMiss = totalInput > 0 ? 1 - totalCache / totalInput : 0;
+  const cumInput = (prev?.totalInputTokens ?? 0) + missInput;
+  const cumCache = (prev?.totalCacheReadTokens ?? 0) + missCache;
+  const cumMiss = cumInput > 0 ? 1 - cumCache / cumInput : 0;
 
   // 累计 output
   const cumOutput = (prev?.cumulativeOutputTokens ?? 0) + segOutput;
@@ -233,14 +239,12 @@ export function aggregateMetrics(input: AggregationInput): SessionMetrics {
     toolUseRatio: round4(toolRatio),
     maxTurnDurationMs: Math.max(prev?.maxTurnDurationMs ?? 0, maxTurnMs),
     toolErrorCount: (prev?.toolErrorCount ?? 0) + segErrors,
+    totalInputTokens: cumInput,
+    totalCacheReadTokens: cumCache,
   };
 }
 
 // ── helpers ──────────────────────────────────────────────────
-
-function avgInput(m: SessionMetrics): number {
-  return m.totalRounds > 0 ? m.maxSingleRoundInput : 0;
-}
 
 function latStats(latencies: number[], prev?: SessionMetrics | null) {
   // ponytail: 从旧值无法还原完整序列，把旧的中位/p90/max 当作单点并入排序。足够。
