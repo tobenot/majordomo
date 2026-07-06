@@ -20,10 +20,19 @@ html, body {
   margin: 0;
   height: 100%;
   background: transparent;
-  font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  font-family: "Apple Color Emoji", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
   color: var(--text);
   overflow: hidden;
   user-select: none;
+}
+
+/* Google Noto emoji replacement images */
+img.emoji-img {
+  width: 1.25em;
+  height: 1.25em;
+  margin: 0 0.05em;
+  vertical-align: -0.25em;
+  display: inline;
 }
 
 .card {

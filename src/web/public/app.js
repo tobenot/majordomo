@@ -18,6 +18,16 @@
     return raw;
   }
 
+  const HAS_EMOJI_RE = /\p{Emoji_Presentation}|\p{Emoji}️|\p{Extended_Pictographic}(?=\s|$|[#*0-9]️?⃣?)/gu;
+  function replaceEmoji(html) {
+    if (!HAS_EMOJI_RE.test(html)) return html;
+    HAS_EMOJI_RE.lastIndex = 0;
+    return html.replace(HAS_EMOJI_RE, function (ch) {
+      return '<img class="emoji-img" src="https://emojicdn.elk.sh/' +
+        encodeURIComponent(ch) + '?style=google" alt="' + ch + '" />';
+    });
+  }
+
   const state = {
     ws: null,
     windows: [], // WindowInfo[]
@@ -221,7 +231,7 @@
           '<span class="persona-who">' + escapeHtml(state.personaName) + '</span>' +
           '<span class="persona-ts">' + fmtTime(msgs[i].ts) + '</span>' +
           '</div>' +
-          '<div class="persona-bubble-body md">' + window.MjMarkdown.render(msgs[i].text) + '</div>' +
+          '<div class="persona-bubble-body md">' + replaceEmoji(window.MjMarkdown.render(msgs[i].text)) + '</div>' +
           '</div>';
       }
       html += '</div>';

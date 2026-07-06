@@ -4,6 +4,16 @@
 (function () {
   "use strict";
 
+  var HAS_EMOJI_RE = /\p{Emoji_Presentation}|\p{Emoji}️|\p{Extended_Pictographic}(?=\s|$|[#*0-9]️?⃣?)/gu;
+  function replaceEmoji(html) {
+    if (!HAS_EMOJI_RE.test(html)) return html;
+    HAS_EMOJI_RE.lastIndex = 0;
+    return html.replace(HAS_EMOJI_RE, function (ch) {
+      return '<img class="emoji-img" src="https://emojicdn.elk.sh/' +
+        encodeURIComponent(ch) + '?style=google" alt="' + ch + '" />';
+    });
+  }
+
   var WS_URL = resolveWsUrl(window.__WS_URL__);
   var el = function (id) { return document.getElementById(id); };
 
@@ -252,7 +262,7 @@
     el("card").classList.toggle("unread", !!state.unread[state.current]);
 
     var text = w.lastPersona || w.lastText || "";
-    el("persona").innerHTML = text ? window.MjMarkdown.render(text) : '<span class="empty">（暂无交接文本）</span>';
+    el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
 
     // 会话度量（简短行内版）
     var m = popupMetrics(w.metrics);

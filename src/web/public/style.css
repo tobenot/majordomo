@@ -21,12 +21,21 @@
 
 body {
   margin: 0;
-  font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  font-family: "Apple Color Emoji", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
   background: radial-gradient(ellipse at 50% 0%, #18181f 0%, var(--bg) 70%);
   color: var(--text);
   height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* Google Noto emoji replacement images */
+img.emoji-img {
+  width: 1.25em;
+  height: 1.25em;
+  margin: 0 0.05em;
+  vertical-align: -0.25em;
+  display: inline;
 }
 
 header {
