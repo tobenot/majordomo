@@ -169,17 +169,20 @@ export function aggregateMetrics(input: AggregationInput): SessionMetrics {
     if (e.hasToolError) segErrors++;
   }
 
-  // 本段 miss%
-  const segMiss = segInput > 0 ? 1 - segCacheRead / segInput : 0;
+  // 本段 miss%（首轮必 miss，不计入——不然每个会话开头都拉高误报）
+  const firstRound = prev ? null : entries[0];
+  const missInput = segInput - (firstRound ? firstRound.inputTokens : 0);
+  const missCache = segCacheRead - (firstRound ? firstRound.cacheReadTokens : 0);
+  const segMiss = missInput > 0 ? 1 - missCache / missInput : 0;
 
   // 累计
   const prevRounds = prev?.totalRounds ?? 0;
   const newRounds = prevRounds + entries.length;
-  const prevInputSum = prev ? (prev.missPercent > 0 ? prev.totalRounds * avgInput(prev) : 0) : 0;
+  const prevInputSum = prev ? (prev.totalRounds * avgInput(prev)) : 0;
   // ponytail: 累计 miss% 用简单加权。足够准，不必逐轮还原。
-  const totalInput = prevInputSum + segInput;
+  const totalInput = prevInputSum + missInput;
   const prevCacheSum = prev ? prevInputSum * (1 - prev.missPercent) : 0;
-  const totalCache = prevCacheSum + segCacheRead;
+  const totalCache = prevCacheSum + missCache;
   const cumMiss = totalInput > 0 ? 1 - totalCache / totalInput : 0;
 
   // 累计 output
