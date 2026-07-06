@@ -183,15 +183,17 @@ export class HubService {
     }
   }
 
-  /** 缓存 miss% 超过阈值时告警，回落时自动消警。ponytail: 阈值硬编码 4%，配配置表再改。 */
+  /** 缓存 miss% 超过阈值时告警，回落时自动消警。用户手动消除后不再重复。 */
   private checkMetricsAlert(w: WindowInfo): void {
     const m = w.metrics;
     if (!m || m.totalRounds === 0) return;
     const pct = Math.round(m.missPercent * 100);
-    if (m.missPercent > 0.04) {
+    if (m.missPercent > 0.5) {
+      // 用户已手动消除过 → 不再重复告警
+      if (this.acceptance.hasByWindowAndKind(w.windowId, "alert")) return;
       const acc = this.acceptance.addUnique({
         windowId: w.windowId,
-        what: `${w.title} 缓存miss率 ${pct}% 超阈值4%（${m.totalRounds}轮）`,
+        what: `${w.title} 缓存miss率 ${pct}% 超阈值50%（${m.totalRounds}轮）`,
         kind: "alert",
       });
       this.broadcast({ type: "acceptance", items: this.acceptance.list() });
@@ -201,7 +203,7 @@ export class HubService {
       const resolved = this.acceptance.resolveByWindowAndKind(w.windowId, "alert");
       if (resolved) {
         this.broadcast({ type: "acceptance", items: this.acceptance.list() });
-        log.debug(`消警: ${w.title} miss ${pct}% ≤ 4%，自动解除`);
+        log.debug(`消警: ${w.title} miss ${pct}% ≤ 50%，自动解除`);
       }
     }
   }

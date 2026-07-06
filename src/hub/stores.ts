@@ -259,6 +259,14 @@ export class AcceptanceStore extends JsonArrayStore<AcceptanceItem> {
     return this.add(opts);
   }
 
+  /** 检查窗口+品类是否已有任何项（不论状态）。用户手动消除后不再重复告警。 */
+  hasByWindowAndKind(windowId: string, kind: AcceptanceItem["kind"]): boolean {
+    for (const a of this.map.values()) {
+      if (a.windowId === windowId && a.kind === kind) return true;
+    }
+    return false;
+  }
+
   /** 按窗口 + kind 找到 pending 项并标记 resolved。用于告警自愈：miss% 回落自动消警。 */
   resolveByWindowAndKind(windowId: string, kind: AcceptanceItem["kind"]): AcceptanceItem | undefined {
     for (const a of this.map.values()) {

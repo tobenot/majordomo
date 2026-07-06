@@ -133,7 +133,7 @@
     ws.forEach((w) => {
       const li = document.createElement("li");
       if (w.windowId === state.current) li.className = "active";
-      var hasMissAlert = w.metrics && w.metrics.missPercent > 0.04;
+      var hasMissAlert = w.metrics && w.metrics.missPercent > 0.5;
       if (hasMissAlert) li.classList.add("window-alert");
       li.innerHTML =
         '<div class="s-name"><span class="dot ' + w.state + '"></span>' +
@@ -318,14 +318,14 @@
     if (!m || !m.totalRounds) return "";
     var pct = Math.round(m.missPercent * 100);
     var slow = Math.round(m.latencyMaxMs / 1000);
-    var alertClass = m.missPercent > 0.04 ? " metrics-alert" : "";
+    var alertClass = m.missPercent > 0.5 ? " metrics-alert" : "";
     return '<div class="s-metrics' + alertClass + '">miss ' + pct + '% · ' + m.totalRounds + '轮 · 慢峰' + slow + 's</div>';
   }
 
   function metricsDetail(m) {
     if (!m || !m.totalRounds) return "";
     return (
-      '<div class="metrics-card' + (m.missPercent > 0.04 ? ' metrics-card-alert' : '') + '">' +
+      '<div class="metrics-card' + (m.missPercent > 0.5 ? ' metrics-card-alert' : '') + '">' +
       '<div class="metrics-title">会话度量</div>' +
       '<div class="metrics-grid">' +
         metricsKV('miss%', Math.round(m.missPercent * 100) + '%') +
