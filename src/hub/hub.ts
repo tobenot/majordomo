@@ -215,15 +215,9 @@ export class HubService {
     }
     this.lastPersonaAt.set(w.windowId, now);
     try {
-      // 如有会话度量，把关键数值捎进上下文让 persona 提及
-      const metricsCtx = formatMetricsContext(w);
-      const reportInput = metricsCtx
-        ? `${workerText}\n\n[会话度量] miss ${(metricsCtx.missPercent * 100).toFixed(0)}%, ${metricsCtx.totalRounds}轮, 最慢${metricsCtx.latencyMaxS}s`
-        : workerText;
-
       const text = await this.persona.report({
         userText: "",
-        workerText: reportInput,
+        workerText,
         sessionName: w.title,
       });
       this.windows.addPersona(w.windowId, text);
@@ -266,17 +260,6 @@ export class HubService {
     this.acceptance.clearAll();
     this.broadcast({ type: "acceptance", items: this.acceptance.list() });
   }
-}
-
-/** 摘一句话作活动流 summary。取首句 / 首行，截断。 */
-function formatMetricsContext(w: WindowInfo): { missPercent: number; totalRounds: number; latencyMaxS: number } | null {
-  const m = w.metrics;
-  if (!m || m.totalRounds === 0) return null;
-  return {
-    missPercent: m.missPercent,
-    totalRounds: m.totalRounds,
-    latencyMaxS: Math.round(m.latencyMaxMs / 1000),
-  };
 }
 
 /** 摘一句话作活动流 summary。取首句 / 首行，截断。 */
