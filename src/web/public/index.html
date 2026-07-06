@@ -55,6 +55,7 @@
         <div class="rail-section">
           <div class="rail-head">
             <span>全局待办 <span id="todoCount" class="count">0</span></span>
+            <button id="btnClearTodos" class="clear-btn" title="清空全部待办">清空</button>
           </div>
           <form id="todoForm" class="todo-form">
             <input id="todoInput" type="text" autocomplete="off" placeholder="加一条待办，回车…" />
@@ -62,7 +63,9 @@
           <ul id="todoList" class="rail-list"></ul>
         </div>
         <div class="rail-section">
-          <div class="rail-head"><span>待验收 <span id="accCount" class="count">0</span></span></div>
+          <div class="rail-head"><span>待验收 <span id="accCount" class="count">0</span></span>
+            <button id="btnClearAcc" class="clear-btn" title="清空全部待验收项">清空</button>
+          </div>
           <ul id="acceptanceList" class="rail-list"></ul>
         </div>
       </aside>

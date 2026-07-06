@@ -277,8 +277,16 @@ export class CoreDaemon {
         this.hub.removeTodo(msg.id);
         break;
 
+      case "todo_clear_all":
+        this.hub.clearAllTodos();
+        break;
+
       case "acceptance_resolve":
         this.hub.resolveAcceptance(msg.id);
+        break;
+
+      case "acceptance_clear_all":
+        this.hub.clearAllAcceptance();
         break;
 
       case "popup_suppress":

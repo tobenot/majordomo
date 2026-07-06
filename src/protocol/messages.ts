@@ -66,7 +66,9 @@ export type ClientMessage =
   | { type: "todo_add"; text: string; windowId?: string }
   | { type: "todo_set_status"; id: string; status: "open" | "done" }
   | { type: "todo_remove"; id: string }
+  | { type: "todo_clear_all" }
   | { type: "acceptance_resolve"; id: string }
+  | { type: "acceptance_clear_all" }
   | { type: "popup_suppress" }
   | { type: "popup_restore" };
 

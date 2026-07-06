@@ -207,6 +207,11 @@ export class TodoStore extends JsonArrayStore<TodoItem> {
     if (ok) this.persist();
     return ok;
   }
+
+  clearAll(): void {
+    this.map.clear();
+    this.persist();
+  }
 }
 
 /** ③ 待验收事项：要你 review / 拍板 / 处理权限的事。 */
@@ -274,6 +279,11 @@ export class AcceptanceStore extends JsonArrayStore<AcceptanceItem> {
     a.resolvedAt = Date.now();
     this.persist();
     return a;
+  }
+
+  clearAll(): void {
+    this.map.clear();
+    this.persist();
   }
 }
 

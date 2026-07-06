@@ -256,6 +256,16 @@ export class HubService {
     this.acceptance.resolve(id);
     this.broadcast({ type: "acceptance", items: this.acceptance.list() });
   }
+
+  clearAllTodos(): void {
+    this.todos.clearAll();
+    this.broadcast({ type: "todos", todos: this.todos.list() });
+  }
+
+  clearAllAcceptance(): void {
+    this.acceptance.clearAll();
+    this.broadcast({ type: "acceptance", items: this.acceptance.list() });
+  }
 }
 
 /** 摘一句话作活动流 summary。取首句 / 首行，截断。 */

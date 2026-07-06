@@ -267,7 +267,13 @@ li.window-alert .dot {
 .rail-section { display: flex; flex-direction: column; min-height: 0; flex: 1; border-bottom: 1px solid var(--border); }
 .rail-head {
   padding: 12px 14px 8px; font-size: 13px; color: var(--text2);
+  display: flex; justify-content: space-between; align-items: center;
 }
+.clear-btn {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text2); font-size: 12px; padding: 2px 8px; cursor: pointer;
+}
+.clear-btn:hover { border-color: var(--accent); color: var(--accent); }
 .todo-form { padding: 0 12px 8px; }
 .todo-form input {
   width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;

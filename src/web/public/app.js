@@ -379,6 +379,12 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  // 清空按钮
+  var btnClearTodos = el("btnClearTodos");
+  if (btnClearTodos) btnClearTodos.onclick = function () { send({ type: "todo_clear_all" }); };
+  var btnClearAcc = el("btnClearAcc");
+  if (btnClearAcc) btnClearAcc.onclick = function () { send({ type: "acceptance_clear_all" }); };
+
   // 恢复弹窗
   var btnRestore = el("btnPopupRestore");
   if (btnRestore) btnRestore.onclick = function () { send({ type: "popup_restore" }); };
