@@ -148,6 +148,16 @@ export class HubService {
         break;
       }
 
+      case "user_prompt": {
+        const userText = (p.text ?? "").trim();
+        const w = this.windows.record({
+          windowId: env.windowId, cwd, event: env.event,
+          state: "working", summary: userText || "用户输入", lastUserText: userText,
+        });
+        this.pushWindow(w);
+        break;
+      }
+
       default: {
         // 未知事件：仍登记，方便回归采样看新事件形状。
         const w = this.windows.record({

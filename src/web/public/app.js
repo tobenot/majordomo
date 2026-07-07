@@ -110,7 +110,10 @@
   function upsertWindow(w) {
     const i = state.windows.findIndex((x) => x.windowId === w.windowId);
     if (i >= 0) state.windows[i] = w;
-    else state.windows.unshift(w);
+    else {
+      state.windows.unshift(w);
+      if (!state.current) selectWindow(w.windowId);
+    }
     renderWindows();
     if (state.current === w.windowId) renderDetail();
   }
@@ -151,7 +154,7 @@
         '</div><div class="s-meta">' +
         (STATE_LABEL[w.state] || w.state) +
         " · " +
-        escapeHtml(oneLine(w.lastSummary || w.lastText || "", 60)) +
+        escapeHtml(oneLine(w.lastUserText || w.lastSummary || w.lastText || "", 60)) +
         "</div>" +
         (w.metrics ? metricsSummary(w.metrics) : "");
       li.onclick = () => selectWindow(w.windowId);
@@ -207,6 +210,7 @@
     const pScroll = el("personaScroll");
     const actWrap = el("activityWrap");
     const act = el("activity");
+    if (pScroll) pScroll.scrollTop = 0;
     if (!w) {
       el("detailTitle").textContent = "选一个窗口看它在做什么";
       el("detailState").textContent = "";

@@ -107,7 +107,12 @@
         render(); // 更新头部 +N 标签
         return;
       }
-      // 列表模式或收起态 → 展开列表，不自动切到详情
+      // 列表模式 → 自动展开新窗口详情；收起态 → 只展开列表
+      if (state.mode === "list") {
+        showDetail(w.windowId);
+        pulse();
+        return;
+      }
       if (state.mode !== "detail") {
         showList();
         pulse();
@@ -297,6 +302,9 @@
 
     // 未读计数标签
     renderMore();
+
+    // 切窗口后滚回顶部
+    el("personaWrap").scrollTop = 0;
   }
 
   function renderMore() {

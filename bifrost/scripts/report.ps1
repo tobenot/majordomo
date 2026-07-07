@@ -101,6 +101,10 @@ switch ($eventName) {
         $payload.taskDesc = [string]$evt.task_description
         $payload.taskStatus = 'completed'
     }
+    'UserPromptSubmit' {
+        $mappedEvent = 'user_prompt'
+        $payload.text = Trim-Text ([string]$evt.prompt)
+    }
     default         { $mappedEvent = $eventName.ToLower() }  # forward unknowns raw-ish
 }
 

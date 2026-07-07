@@ -26,6 +26,7 @@ export type IngestEvent =
   | "notification"
   | "task_created"
   | "task_completed"
+  | "user_prompt"
   | string; // 未知事件容错前向
 
 export interface IngestPayload {
@@ -72,6 +73,8 @@ export interface WindowInfo {
   personaMessages: PersonaMessage[];
   /** worker stop 事件的原文摘要（summarize 首句），列表预览用。 */
   lastSummary: string;
+  /** 用户最近一次发送的消息（截断），列表预览优先显示。 */
+  lastUserText: string;
   /** 事件流环形缓冲，保留最近 N 条 */
   activity: WindowActivity[];
   onlineSince: number;

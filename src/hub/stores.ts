@@ -92,6 +92,7 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
     state: WindowState;
     summary: string;
     lastText?: string;
+    lastUserText?: string;
   }): WindowInfo {
     const now = Date.now();
     let w = this.map.get(opts.windowId);
@@ -104,6 +105,7 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
         lastEvent: opts.event,
         lastText: opts.lastText ?? "",
         lastSummary: "",
+        lastUserText: "",
         personaMessages: [],
         activity: [],
         onlineSince: now,
@@ -111,9 +113,10 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
       };
       this.map.set(opts.windowId, w);
     }
-    // 旧数据兼容：无 personaMessages / lastSummary 的窗口补齐
+    // 旧数据兼容：无 personaMessages / lastSummary / lastUserText 的窗口补齐
     if (!w.personaMessages) w.personaMessages = [];
     if (w.lastSummary === undefined) w.lastSummary = "";
+    if (w.lastUserText === undefined) w.lastUserText = "";
     if (opts.cwd) {
       w.cwd = opts.cwd;
       w.title = titleOf(opts.cwd, opts.windowId);
@@ -121,6 +124,7 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
     w.state = opts.state;
     w.lastEvent = opts.event;
     if (opts.lastText !== undefined && opts.lastText !== "") w.lastText = opts.lastText;
+    if (opts.lastUserText !== undefined && opts.lastUserText !== "") w.lastUserText = opts.lastUserText;
     // stop 事件的 summary 就是 worker 原文首句 → 列表预览用
     if (opts.summary) w.lastSummary = opts.summary;
     w.updatedAt = now;
