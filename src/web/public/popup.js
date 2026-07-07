@@ -63,12 +63,12 @@
     // 解析推荐回复
     var rec = parseRecommend(personaText);
     if (rec) {
-      html += '<div class="qa-chip qa-rec" data-copy="' + escapeAttr(rec) + '" title="' + escapeAttr(rec) + '">' + escapeHtml(rec) + "</div>";
+      html += '<div class="qa-chip qa-rec" data-copy="' + escapeHtml(rec) + '" title="' + escapeHtml(rec) + '">' + escapeHtml(rec) + "</div>";
     }
 
     // 预设 chip
     PRESET_CHIPS.forEach(function (c) {
-      html += '<div class="qa-chip" data-copy="' + escapeAttr(c.text) + '" title="' + escapeAttr(c.text) + '">' + escapeHtml(c.label) + "</div>";
+      html += '<div class="qa-chip" data-copy="' + escapeHtml(c.text) + '" title="' + escapeHtml(c.text) + '">' + escapeHtml(c.label) + "</div>";
     });
 
     panel.innerHTML = html;
