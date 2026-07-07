@@ -47,6 +47,8 @@
   var PRESET_CHIPS = [
     { label: "/clear", text: "/clear" },
     { label: "commit", text: "commit" },
+    { label: "/compact", text: "/compact" },
+    { label: "维护文档，commit并push", text: "维护文档，commit并push" },
   ];
 
   function parseRecommend(text) {
