@@ -42,6 +42,67 @@
 
   var STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
 
+  // ── 快捷面板 ────────────────────────────────────────────
+  // ponytail: 预设硬编码，够用；推荐回复从 persona 文本解析
+  var PRESET_CHIPS = [
+    { label: "/clear", text: "/clear" },
+    { label: "commit", text: "commit" },
+  ];
+
+  function parseRecommend(text) {
+    if (!text) return "";
+    var m = text.match(/\[推荐回复\]\s*(.+?)(?:\r?\n|$)/);
+    return m ? m[1].trim() : "";
+  }
+
+  function renderQuickActions(personaText) {
+    var panel = el("quickActions");
+    if (!panel) return;
+    var html = "";
+
+    // 解析推荐回复
+    var rec = parseRecommend(personaText);
+    if (rec) {
+      html += '<div class="qa-chip qa-rec" data-copy="' + escapeAttr(rec) + '" title="' + escapeAttr(rec) + '">' + escapeHtml(rec) + "</div>";
+    }
+
+    // 预设 chip
+    PRESET_CHIPS.forEach(function (c) {
+      html += '<div class="qa-chip" data-copy="' + escapeAttr(c.text) + '" title="' + escapeAttr(c.text) + '">' + escapeHtml(c.label) + "</div>";
+    });
+
+    panel.innerHTML = html;
+
+    // 绑定点击
+    panel.querySelectorAll(".qa-chip").forEach(function (chip) {
+      chip.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var text = chip.dataset.copy || "";
+        copyChip(chip, text);
+      });
+    });
+  }
+
+  function copyChip(chip, text) {
+    var done = function () {
+      chip.classList.add("copied");
+      chip.textContent = "已复制 ✓";
+      setTimeout(function () {
+        chip.classList.remove("copied");
+        chip.textContent = chip.dataset.copy || "";
+      }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+    } else {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); document.body.removeChild(ta); done();
+      } catch (e) { /* ignore */ }
+    }
+  }
+
   // ── 连接 ────────────────────────────────────────────────
   function connect() {
     var ws;
@@ -161,6 +222,7 @@
   function showList() {
     state.mode = "list";
     state.current = null;
+    toggleNavArrows(false);
     expand();
     render();
   }
@@ -285,6 +347,26 @@
     });
   }
 
+  function toggleNavArrows(visible) {
+    var list = windowList();
+    var show = visible && list.length > 1;
+    el("navLeft").classList.toggle("visible", show);
+    el("navRight").classList.toggle("visible", show);
+  }
+
+  function navWindow(dir) {
+    if (state.mode !== "detail") return;
+    var list = windowList();
+    if (list.length < 2) return;
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) { if (list[i].windowId === state.current) { idx = i; break; } }
+    if (idx < 0) return;
+    var next = dir === -1 ? idx - 1 : idx + 1;
+    if (next < 0) next = list.length - 1;
+    if (next >= list.length) next = 0;
+    showDetail(list[next].windowId);
+  }
+
   function renderDetail() {
     el("card").classList.remove("collapsed");
     el("listWrap").style.display = "none";
@@ -295,6 +377,7 @@
 
     el("proj").textContent = (w.title || "majordomo");
     el("proj").title = w.cwd || "";
+    toggleNavArrows(true);
     el("time").textContent = fmtTime(w.updatedAt) + " · " + (STATE_LABEL[w.state] || w.state);
     el("who").textContent = state.personaName;
 
@@ -303,6 +386,9 @@
 
     var text = w.lastPersona || w.lastText || "";
     el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
+
+    // 立绘下方快捷面板
+    renderQuickActions(text);
 
     // 会话度量（简短行内版）
     var m = popupMetrics(w.metrics);
@@ -421,6 +507,18 @@
     if (!w) return "";
     return w.lastPersona || w.lastText || "";
   }
+
+  // 左右方向键导航窗口
+  document.addEventListener("keydown", function (e) {
+    if (state.mode !== "detail") return;
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); navWindow(-1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); navWindow(1); }
+  });
+
+  // 导航箭头点击
+  el("navLeft").onclick = function () { navWindow(-1); };
+  el("navRight").onclick = function () { navWindow(1); };
 
   // 双击头部回列表
   el("head").addEventListener("dblclick", function () {

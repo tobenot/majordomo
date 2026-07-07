@@ -84,7 +84,7 @@ export class ApiPersona implements PersonaEngine {
     const now = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
     // ponytail: 去掉代码块内容，只留占位——persona 不需要看几十行 diff
     const clean = input.workerText.replace(/```[\s\S]*?```/g, "[代码块已省略]");
-    return `当前时间：${now}\n\n主人的指令：${input.userText}\n\n工作层的原始输出（注意：这可能只是最后一轮，前面或许还有铺垫工作）：\n${clean}\n\n请用你的判断力和猫娘口吻汇报——抓重点、给评价、多贴贴。`;
+    return `当前时间：${now}\n\n主人的指令：${input.userText}\n\n工作层的原始输出（注意：这可能只是最后一轮，前面或许还有铺垫工作）：\n${clean}\n\n请用你的判断力和猫娘口吻汇报——抓重点、给评价、多贴贴。\n\n【重要】回复末尾必须单独一行输出：[推荐回复] 一句可直接发给 AI 执行的指令。`;
   }
 
   private baseUrl(): string {

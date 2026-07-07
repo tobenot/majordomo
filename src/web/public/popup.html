@@ -13,7 +13,9 @@
       <header id="head">
         <span class="avatar-emoji">🍯</span>
         <img class="logo" id="logo" src="assets/favicon.svg" alt="⌘" />
+        <span class="nav-arrow" id="navLeft" title="上一个窗口 (←)">◀</span>
         <span class="proj" id="proj">majordomo</span>
+        <span class="nav-arrow" id="navRight" title="下一个窗口 (→)">▶</span>
         <span class="more" id="more" style="display:none"></span>
         <span class="spacer"></span>
         <span class="time" id="time"></span>
@@ -37,8 +39,11 @@
         <section class="persona" id="personaWrap">
           <div class="who" id="who">中枢</div>
           <div class="persona-row">
-            <div class="standing-frame" id="standingFrame">
-              <img class="standing" id="standing" src="" alt="" />
+            <div class="standing-col">
+              <div class="standing-frame" id="standingFrame">
+                <img class="standing" id="standing" src="" alt="" />
+              </div>
+              <div class="quick-actions" id="quickActions"></div>
             </div>
             <div class="body" id="persona"></div>
           </div>
