@@ -335,8 +335,12 @@
     // 未读计数标签
     renderMore();
 
-    // 切窗口后滚回顶部
-    el("personaWrap").scrollTop = 0;
+    // 切窗口后滚回顶部（rAF 等布局完成，否则 scrollTop=0 会被后续重排冲掉）
+    requestAnimationFrame(function () {
+      el("personaWrap").scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    });
   }
 
   function renderMore() {
