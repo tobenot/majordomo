@@ -84,10 +84,34 @@
         if (state.windows[msg.windowId]) state.windows[msg.windowId].state = "offline";
         render();
         break;
-      case "window_persona":
-        if (state.windows[msg.windowId]) state.windows[msg.windowId].lastPersona = msg.text;
-        upsert(state.windows[msg.windowId]);
+      case "window_persona": {
+        var win = state.windows[msg.windowId];
+        if (!win) break;
+        var isNewPersona = win.lastPersona !== msg.text;
+        win.lastPersona = msg.text;
+        if (msg.personaMessages) win.personaMessages = msg.personaMessages;
+
+        if (isNewPersona) {
+          state.unread[msg.windowId] = true;
+          if (state.mode === "detail" && state.current !== msg.windowId) {
+            pulse();
+            render();
+          } else if (state.mode === "list") {
+            showDetail(msg.windowId);
+            pulse();
+          } else if (state.mode !== "detail") {
+            showList();
+            pulse();
+          } else {
+            render();
+          }
+        } else if (state.mode === "detail" && state.current === msg.windowId) {
+          render();
+        } else if (state.mode === "list") {
+          render();
+        }
         break;
+      }
     }
   }
 
@@ -95,8 +119,16 @@
     var prev = state.windows[w.windowId];
     state.windows[w.windowId] = w;
 
+    var isNew = !prev;
     var becameWaiting = w.state === "waiting" && (!prev || prev.state !== "waiting");
     var hasNewPersona = w.lastPersona && (!prev || prev.lastPersona !== w.lastPersona);
+
+    // 新窗口上线 → 列表模式下自动展开
+    if (isNew && state.mode === "list") {
+      showDetail(w.windowId);
+      pulse();
+      return;
+    }
 
     // 需要你介入 或 有新 persona → 标记未读
     if (becameWaiting || hasNewPersona) {
