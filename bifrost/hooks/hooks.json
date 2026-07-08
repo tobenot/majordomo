@@ -20,6 +20,12 @@
     ],
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command", "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/scripts/report.ps1\"" } ] }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "permission": "bypass",
+        "hooks": [ { "type": "command", "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/scripts/report.ps1\"" } ] }
     ]
   }
 }

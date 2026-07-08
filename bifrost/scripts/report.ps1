@@ -105,6 +105,21 @@ switch ($eventName) {
         $mappedEvent = 'user_prompt'
         $payload.text = Trim-Text ([string]$evt.prompt)
     }
+    'PreToolUse' {
+        $toolName = [string]$evt.tool_name
+        if ($toolName -ne 'AskUserQuestion') { exit 0 }  # only AskUserQuestion blocks the turn
+        $mappedEvent = 'notification'
+        $payload.notificationType = 'permission_prompt'
+        # Extract first question text for the notification message
+        $qText = ''
+        try {
+            $input = $evt.tool_input
+            if ($input.questions -and $input.questions.Count -gt 0) {
+                $qText = [string]$input.questions[0].question
+            }
+        } catch { }
+        $payload.text = if ($qText) { "AskUserQuestion: $qText" } else { '等待你选择 (AskUserQuestion)' }
+    }
     default         { $mappedEvent = $eventName.ToLower() }  # forward unknowns raw-ish
 }
 
