@@ -38,6 +38,7 @@
     assetNames: [],
     unread: {},         // windowId -> true
     mode: "collapsed",  // 'list' | 'detail' | 'collapsed'
+    suppressed: false,  // 用户点了缩小：只留头部条，不响应新事件展开
   };
 
   var STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
@@ -137,6 +138,7 @@
       case "hub_snapshot":
         state.windows = {};
         (msg.snapshot.windows || []).forEach(function (w) { state.windows[w.windowId] = w; });
+        if (state.suppressed) { renderCollapsed(); return; }
         if (state.mode === "collapsed") showList();
         else render();
         break;
@@ -145,7 +147,7 @@
         break;
       case "window_offline":
         if (state.windows[msg.windowId]) state.windows[msg.windowId].state = "offline";
-        render();
+        if (!state.suppressed) render();
         break;
       case "window_persona": {
         var win = state.windows[msg.windowId];
@@ -156,6 +158,11 @@
 
         if (isNewPersona) {
           state.unread[msg.windowId] = true;
+          if (state.suppressed) {
+            // 缩小态：只脉冲提示，不展开
+            pulse();
+            return;
+          }
           if (state.mode === "detail" && state.current !== msg.windowId) {
             pulse();
             render();
@@ -186,6 +193,17 @@
     var becameWaiting = w.state === "waiting" && (!prev || prev.state !== "waiting");
     var hasNewPersona = w.lastPersona && (!prev || prev.lastPersona !== w.lastPersona);
 
+    // 需要你介入 或 有新 persona → 标记未读
+    if (becameWaiting || hasNewPersona) {
+      state.unread[w.windowId] = true;
+    }
+
+    // 缩小态：只静默更新数据，不展开
+    if (state.suppressed) {
+      if (becameWaiting || hasNewPersona) pulse();
+      return;
+    }
+
     // 新窗口上线 → 列表模式下自动展开
     if (isNew && state.mode === "list") {
       showDetail(w.windowId);
@@ -193,9 +211,7 @@
       return;
     }
 
-    // 需要你介入 或 有新 persona → 标记未读
     if (becameWaiting || hasNewPersona) {
-      state.unread[w.windowId] = true;
       // 不抢焦点：如果正在看别的窗口，只脉冲提示，不切走
       if (state.mode === "detail" && state.current !== w.windowId) {
         pulse(); // 轻脉冲提示有新东西
@@ -457,11 +473,27 @@
   }
 
   // ── 按钮 ────────────────────────────────────────────────
-  // 缩小：抑制弹窗 → 关闭窗口
+  // 缩小/恢复：抑制时只留头部条，新事件不抢焦点。再点恢复。
   el("btnMin").onclick = function () {
-    send({ type: "popup_suppress" });
-    setTimeout(function () { window.close(); }, 300);
+    if (state.suppressed) {
+      restorePopup();
+    } else {
+      state.suppressed = true;
+      state.mode = "collapsed";
+      send({ type: "popup_suppress" });
+      renderCollapsed();
+      el("btnMin").textContent = "+";
+      el("btnMin").title = "恢复弹窗";
+    }
   };
+
+  function restorePopup() {
+    state.suppressed = false;
+    send({ type: "popup_restore" });
+    el("btnMin").textContent = "−";
+    el("btnMin").title = "缩小弹窗（不再自动弹出）";
+    showList();
+  }
 
   // "知道了"：清除当前未读 → 回列表
   el("btnOk").onclick = function () {
@@ -522,8 +554,9 @@
   el("navLeft").onclick = function () { navWindow(-1); };
   el("navRight").onclick = function () { navWindow(1); };
 
-  // 双击头部回列表
+  // 双击头部：缩小态恢复，详情态回列表
   el("head").addEventListener("dblclick", function () {
+    if (state.suppressed) { restorePopup(); return; }
     if (state.mode === "detail") showList();
     else if (state.mode === "list" && state.current) showDetail(state.current);
   });
