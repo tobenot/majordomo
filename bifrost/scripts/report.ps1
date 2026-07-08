@@ -113,9 +113,9 @@ switch ($eventName) {
         # Extract first question text for the notification message
         $qText = ''
         try {
-            $input = $evt.tool_input
-            if ($input.questions -and $input.questions.Count -gt 0) {
-                $qText = [string]$input.questions[0].question
+            $toolInput = $evt.tool_input
+            if ($toolInput.questions -and $toolInput.questions.Count -gt 0) {
+                $qText = [string]$toolInput.questions[0].question
             }
         } catch { }
         $payload.text = if ($qText) { "AskUserQuestion: $qText" } else { '等待你选择 (AskUserQuestion)' }

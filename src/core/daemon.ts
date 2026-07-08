@@ -117,6 +117,7 @@ export class CoreDaemon {
       req.on("end", () => {
         try {
           const env = JSON.parse(body) as IngestEnvelope;
+          log.debug(`/ingest ← ${env.event} (${env.windowId})`);
           this.hub.ingest(env);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ ok: true }));
