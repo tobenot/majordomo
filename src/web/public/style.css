@@ -177,6 +177,7 @@ li.window-alert .dot {
 .persona-scroll {
   position: relative; z-index: 1;
   height: 100%; overflow-y: auto; padding: 16px 22px;
+  overflow-anchor: none;
 }
 /* 立绘：9:16，放在最新气泡左侧，感觉是她在说话 */
 .persona-bubble-last {

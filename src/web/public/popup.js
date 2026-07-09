@@ -421,6 +421,10 @@
     var text = w.lastPersona || w.lastText || "";
     el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
 
+    // 滚回顶部：先同步设一次（overflow-anchor:none 已关掉浏览器锚定），
+    // 再用 rAF 兜底等布局完成后的残留偏移
+    el("personaWrap").scrollTop = 0;
+
     // 立绘下方快捷面板
     renderQuickActions(text);
 

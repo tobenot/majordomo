@@ -210,12 +210,11 @@
     const pScroll = el("personaScroll");
     const actWrap = el("activityWrap");
     const act = el("activity");
-    if (pScroll) pScroll.scrollTop = 0;
     if (!w) {
       el("detailTitle").textContent = "选一个窗口看它在做什么";
       el("detailState").textContent = "";
       el("detailState").className = "badge";
-      if (pScroll) pScroll.innerHTML = "";
+      if (pScroll) { pScroll.innerHTML = ""; pScroll.scrollTop = 0; }
       actWrap.classList.add("hidden");
       return;
     }
@@ -248,6 +247,7 @@
       }
       html += '</div>';
       pScroll.innerHTML = html;
+      pScroll.scrollTop = 0;
       var name = state.assetName || "";
       loadImg(el("standingPanel"), assetUrl("standing", name));
     } else {
