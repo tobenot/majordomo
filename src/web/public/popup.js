@@ -312,6 +312,22 @@
   }
 
   function renderCollapsed() {
+    var unreadCount = 0;
+    for (var k in state.unread) { if (state.unread.hasOwnProperty(k) && state.unread[k]) unreadCount++; }
+
+    if (state.suppressed) {
+      // 缩小态徽章：人设名 + 未读指示
+      el("badgeName").textContent = state.personaName;
+      var dot = el("badgeDot");
+      if (unreadCount > 0) { dot.classList.add("unread"); dot.title = unreadCount + " 项更新"; }
+      else { dot.classList.remove("unread"); dot.title = ""; }
+      el("card").classList.add("suppressed");
+      el("card").classList.remove("collapsed");
+      return;
+    }
+
+    // 普通收起态（初始闪屏期）
+    el("card").classList.remove("suppressed");
     el("proj").textContent = "majordomo";
     el("more").style.display = "none";
     el("time").textContent = "";
@@ -473,6 +489,9 @@
   }
 
   // ── 按钮 ────────────────────────────────────────────────
+  // 缩小徽章：点击恢复
+  el("suppressedBadge").onclick = function () { restorePopup(); };
+
   // 缩小/恢复：抑制时只留头部条，新事件不抢焦点。再点恢复。
   el("btnMin").onclick = function () {
     if (state.suppressed) {
@@ -568,7 +587,7 @@
     void card.offsetWidth;
     card.classList.add("pulse");
   }
-  function expand() { el("card").classList.remove("collapsed"); }
+  function expand() { el("card").classList.remove("collapsed", "suppressed"); }
 
   // ── 工具 ────────────────────────────────────────────────
   function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }

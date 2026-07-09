@@ -308,8 +308,43 @@ footer button.primary:hover { background: var(--honey-light); }
 footer button.copied { background: var(--green); color: #fff; border-color: var(--green); }
 footer button#btnList { flex: 0 0 36px; }
 
-/* 收起态：只留头部一条 */
-.card.collapsed .list-wrap,
-.card.collapsed .detail-wrap,
-.card.collapsed footer { display: none; }
-.card.collapsed { height: auto; }
+/* 缩小态：安静的小徽章——只露头像 + 人设名，不抢焦点 */
+.card.suppressed {
+  height: auto;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, #1a1a24, var(--bg));
+}
+.card.suppressed .list-wrap,
+.card.suppressed .detail-wrap,
+.card.suppressed footer,
+.card.suppressed header { display: none; }
+.suppressed-badge {
+  display: none;
+  align-items: center; gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  -webkit-app-region: drag;
+}
+.card.suppressed .suppressed-badge { display: flex; }
+.suppressed-badge .badge-emoji {
+  font-size: 18px; line-height: 1;
+}
+.suppressed-badge .badge-name {
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.suppressed-badge .badge-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--border);
+  margin-left: 2px;
+}
+.suppressed-badge .badge-dot.unread {
+  background: var(--honey);
+  box-shadow: 0 0 6px var(--honey);
+  animation: breathe-dot 2s ease-in-out infinite;
+}
+@keyframes breathe-dot {
+  0%, 100% { box-shadow: 0 0 4px var(--honey); }
+  50% { box-shadow: 0 0 10px var(--honey); }
+}
