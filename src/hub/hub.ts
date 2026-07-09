@@ -177,7 +177,10 @@ export class HubService {
 
   private async updateMetrics(windowId: string, transcriptPath: string): Promise<void> {
     const cursor = this.metricsCursors.get(windowId) ?? null;
-    const prev = this.windows.get(windowId)?.metrics ?? null;
+    // ponytail: cursor=null 意味着 daemon 重启或首次读——从头扫整个 transcript。
+    // 此时必须清 prev，否则 skipFirst 失效（prev truthy → 第一轮 100% miss 被计入），
+    // 且旧轮次会被重复累加到累计值。游标和 prev 同生同灭。
+    const prev = cursor ? (this.windows.get(windowId)?.metrics ?? null) : null;
     try {
       const result = readIncremental(transcriptPath, cursor, prev);
       this.metricsCursors.set(windowId, result.cursor);
