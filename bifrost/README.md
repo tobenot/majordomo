@@ -13,37 +13,23 @@
 
 > **壳双开、肉单开**：两份清单 + 两份 hooks 声明；一份 `scripts/report.ps1` + 共用 notify / config。
 
-## 装上（开发期）
+## 安装（多机）
 
-**Claude Code**（`--plugin-dir` 可用）：
+完整步骤（换机清单、中枢地址、验收、FAQ）见 **[INSTALL.md](./INSTALL.md)**。
 
-```bash
-claude --dangerously-skip-permissions --plugin-dir D:/GitRep/majordomo/bifrost
+速查：
+
+```powershell
+# Claude Code — 每次启动带上本机绝对路径
+claude --dangerously-skip-permissions --plugin-dir "D:/GitRep/majordomo/bifrost"
+
+# Cursor — 每台机器跑一次（自动写入 ~/.cursor/hooks.json）
+cd D:\GitRep\majordomo\bifrost
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-cursor-hooks.ps1
+# 然后新开窗口：agent --force
 ```
 
-**Cursor**（现行可靠做法）：
-
-> 实测 `agent --plugin-dir …` **目前不会加载插件 hooks**（CLI 插件能力未对齐）。外仓软链进 `~/.cursor/plugins/local` 也会被拒。  
-> 现行装法：用户级 hooks 指到**同一份** `scripts/report.ps1`（零脚本复制）。
-
-把下面写进 `~/.cursor/hooks.json`（路径按本机改），然后**新开**一个 agent 窗口：
-
-```json
-{
-  "version": 1,
-  "hooks": {
-    "sessionStart": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
-    "sessionEnd": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
-    "afterAgentResponse": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
-    "beforeSubmitPrompt": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
-    "preToolUse": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"", "matcher": "AskUserQuestion" }]
-  }
-}
-```
-
-本机若已写过这份 hooks，直接新开窗口即可。验收看 `bifrost/cache/status.json` 的 `hue` 是否递增，或中枢是否收到上报——**不要**问模型「你有没有 bifrost」（hooks 对 agent 不可见）。
-
-详情：`docs/design/bifrost-cursor-dual-v1.md` §6。
+> Cursor 现行不要用 `agent --plugin-dir`（不加载 hooks）。验收看 `cache/status.json` 的 `hue`，不要问模型「有没有 bifrost」。
 ## Statusline 徽章
 
 `[BIFROST]` 彩虹渐变徽章——中枢连通时每回合换色。中枢不在 → 不显示。
