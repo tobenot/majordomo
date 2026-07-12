@@ -1,8 +1,9 @@
 # bifrost-statusline.ps1 - statusline for Claude Code / Cursor CLI
 # Replaces the built-in line entirely (hosts only run ONE statusLine command),
-# so we redraw the useful bits ourselves: model + context % + optional [BIFROST].
+# so we redraw: model  ctx N% · 200k  [BIFROST]
+# Also sets the terminal / console title from session_name (fallback: cwd leaf).
 #
-# Stdin: host JSON (model.display_name, context_window.used_percentage, ...).
+# Stdin: host JSON (model.*, context_window.*, session_name, cwd, ...).
 # Bifrost badge: cache/status.json from report.ps1; hidden when hub unreachable.
 #
 # Color cycle for badge (7 hues): orange gold green cyan blue purple rose
@@ -10,6 +11,20 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 $Esc = [char]27
+
+function Format-TokenCap {
+    param([double]$n)
+    if ($n -le 0) { return '' }
+    if ($n -ge 1000000) {
+        $m = [math]::Round($n / 1000000.0, 1)
+        if ($m -eq [math]::Floor($m)) { return ("{0}M" -f [int]$m) }
+        return ("{0}M" -f $m)
+    }
+    if ($n -ge 1000) {
+        return ("{0}k" -f [int][math]::Round($n / 1000.0))
+    }
+    return ("{0}" -f [int]$n)
+}
 
 # --- read host payload (UTF-8 bytes; same pitfall as report.ps1) ---
 $payload = $null
@@ -29,20 +44,49 @@ try {
 } catch { }
 
 $model = ''
-$pct = $null
 $param = ''
+$pct = $null
+$cap = ''
+$sessionName = ''
+$cwdLeaf = ''
 try {
     if ($payload) {
         $model = [string]$payload.model.display_name
         if ([string]::IsNullOrWhiteSpace($model)) { $model = [string]$payload.model.id }
         $param = [string]$payload.model.param_summary
-        if ($null -ne $payload.context_window -and $null -ne $payload.context_window.used_percentage) {
-            $pct = [int][math]::Floor([double]$payload.context_window.used_percentage)
+        if ($null -ne $payload.context_window) {
+            if ($null -ne $payload.context_window.used_percentage) {
+                $pct = [int][math]::Floor([double]$payload.context_window.used_percentage)
+            }
+            if ($null -ne $payload.context_window.context_window_size) {
+                $cap = Format-TokenCap ([double]$payload.context_window.context_window_size)
+            }
+        }
+        $sessionName = [string]$payload.session_name
+        $cwd = [string]$payload.cwd
+        if ([string]::IsNullOrWhiteSpace($cwd) -and $payload.workspace) {
+            $cwd = [string]$payload.workspace.current_dir
+        }
+        if (-not [string]::IsNullOrWhiteSpace($cwd)) {
+            $cwdLeaf = Split-Path -Leaf $cwd.TrimEnd('\', '/')
         }
     }
 } catch { }
 
 if ([string]::IsNullOrWhiteSpace($model)) { $model = 'model?' }
+
+# --- terminal / console title (session name, else cwd leaf, else short id) ---
+$title = $sessionName
+if ([string]::IsNullOrWhiteSpace($title)) { $title = $cwdLeaf }
+if ([string]::IsNullOrWhiteSpace($title) -and $payload -and $payload.session_id) {
+    $sid = [string]$payload.session_id
+    if ($sid.Length -gt 8) { $title = $sid.Substring(0, 8) } else { $title = $sid }
+}
+if (-not [string]::IsNullOrWhiteSpace($title)) {
+    try { [Console]::Title = $title } catch { }
+    # OSC 0: some terminals honor this even when Console.Title is a no-op
+    try { [Console]::Write("${Esc}]0;$title$([char]7)") } catch { }
+}
 
 # --- bifrost badge from cache ---
 $root = $env:CURSOR_PLUGIN_ROOT
@@ -62,18 +106,27 @@ try {
     }
 } catch { }
 
-# --- compose: model [param]  ctx N%  [BIFROST] ---
+# --- compose: model  ctx N% · 200k  [BIFROST] ---
+# Skip param_summary when display_name already contains it (Cursor often bakes
+# "High Fast" into both fields -> "High Fast High Fast").
 $parts = New-Object System.Collections.Generic.List[string]
-$left = "${Esc}[90m$model"
-if (-not [string]::IsNullOrWhiteSpace($param)) { $left += " $param" }
-$left += "${Esc}[0m"
-$parts.Add($left)
+$left = $model
+if (-not [string]::IsNullOrWhiteSpace($param)) {
+    $paramBare = $param.Trim().Trim('()')
+    if ($paramBare.Length -gt 0 -and $model.IndexOf($paramBare, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        $left = "$model $param"
+    }
+}
+$parts.Add("${Esc}[90m$left${Esc}[0m")
 
 if ($null -ne $pct) {
-    # green <50, yellow <80, red otherwise
     $pc = 71
     if ($pct -ge 80) { $pc = 167 } elseif ($pct -ge 50) { $pc = 178 }
-    $parts.Add("${Esc}[38;5;${pc}mctx ${pct}%${Esc}[0m")
+    $ctx = "ctx ${pct}%"
+    if ($cap) { $ctx += " · $cap" }
+    $parts.Add("${Esc}[38;5;${pc}m$ctx${Esc}[0m")
+} elseif ($cap) {
+    $parts.Add("${Esc}[90m$cap${Esc}[0m")
 }
 
 if ($badge) { $parts.Add($badge) }

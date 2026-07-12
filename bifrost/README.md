@@ -56,7 +56,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-cursor-hoo
 
 **7 色循环**（均为中等亮度）：🟠橙 → 🟡金 → 🟢绿 → 🩵青 → 🔵蓝 → 🟣紫 → 🩷玫红。
 
-`report.ps1` 每次成功的 stop 上报后写入 `cache/status.json`（`{"reachable":true, "hue":N}`），statusline 只读文件。
+`report.ps1` 每次成功的 stop 上报后写入 `cache/status.json`（`{"reachable":true, "hue":N}`），statusline 只读文件。statusline 另画 `ctx N% · 200k`，并把 `session_name` 写到终端标题。
 
 ## 它做什么
 
