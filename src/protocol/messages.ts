@@ -97,7 +97,15 @@ export type ServerMessage =
   | { type: "window_update"; window: WindowInfo }
   | { type: "window_offline"; windowId: string }
   /** 逐窗口人设复命（中枢的"嘴"），面板挂到对应窗口 */
-  | { type: "window_persona"; windowId: string; text: string; personaMessages?: PersonaMessage[]; partial?: boolean }
+  | {
+      type: "window_persona";
+      windowId: string;
+      text: string;
+      personaMessages?: PersonaMessage[];
+      partial?: boolean;
+      /** 推理模型思考流：只给面板心跳，不入库 */
+      thinking?: boolean;
+    }
   /** 人设层 API 调用中/结束（等 OpenRouter 时让面板别干瞪眼） */
   | { type: "window_persona_status"; windowId: string; phase: "start" | "done" }
   /** 全局待办变更（全量重推，v1 量小无妨） */

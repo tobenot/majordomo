@@ -256,11 +256,17 @@ export class HubService {
       let lastPartialAt = 0;
       const text = await this.persona.report(
         { userText: "", workerText, sessionName: w.title },
-        (accumulated) => {
+        (accumulated, phase) => {
           const now2 = Date.now();
           if (now2 - lastPartialAt < 80) return;
           lastPartialAt = now2;
-          this.broadcast({ type: "window_persona", windowId: w.windowId, text: accumulated, partial: true });
+          this.broadcast({
+            type: "window_persona",
+            windowId: w.windowId,
+            text: accumulated,
+            partial: true,
+            thinking: phase === "reasoning",
+          });
         },
       );
       this.windows.addPersona(w.windowId, text);

@@ -91,7 +91,7 @@
         markOffline(msg.windowId);
         break;
       case "window_persona":
-        if (msg.partial) applyPersonaPartial(msg.windowId, msg.text);
+        if (msg.partial) applyPersonaPartial(msg.windowId, msg.text, msg.thinking);
         else applyPersona(msg.windowId, msg.text, msg.personaMessages);
         break;
       case "window_persona_status":
@@ -134,17 +134,23 @@
     const w = state.windows.find((x) => x.windowId === id);
     if (!w) return;
     w.lastPersona = text;
+    w.lastThinking = "";
     if (personaMessages) w.personaMessages = personaMessages;
     state.personaPending[id] = false;
     if (state.current === id) renderDetail();
     renderWindows();
   }
 
-  function applyPersonaPartial(id, text) {
+  function applyPersonaPartial(id, text, thinking) {
     const w = state.windows.find((x) => x.windowId === id);
     if (!w) return;
-    w.lastPersona = text;
-    // 保持 pending；流式草稿挂在 lastPersona，详情里单独渲
+    if (thinking) {
+      w.lastThinking = text;
+    } else {
+      w.lastPersona = text;
+      w.lastThinking = ""; // 正文开始后收起思考
+    }
+    // 保持 pending；流式草稿挂在 lastPersona / lastThinking
     if (state.current === id) renderDetail({ keepScroll: true });
     renderWindows();
   }
@@ -153,7 +159,10 @@
     state.personaPending[id] = !!pending;
     if (pending) {
       const w = state.windows.find((x) => x.windowId === id);
-      if (w) w.lastPersona = ""; // 清旧稿，避免流式开头闪上一轮
+      if (w) {
+        w.lastPersona = "";
+        w.lastThinking = "";
+      }
     }
     renderWindows();
     if (state.current === id) renderDetail();
@@ -258,9 +267,15 @@
 
     // 人设消息历史（气泡流，最早在上，最新在下）
     var msgs = w.personaMessages || [];
+    var thinkingHtml = "";
+    if (pending && w.lastThinking && !w.lastPersona) {
+      var thinkTail = w.lastThinking.length > 2400 ? "…" + w.lastThinking.slice(-2400) : w.lastThinking;
+      thinkingHtml =
+        '<div class="persona-thinking" id="personaThinking">' + escapeHtml(thinkTail) + "</div>";
+    }
     var pendingBanner = pending
       ? '<div class="persona-pending-banner">' +
-        (w.lastPersona ? "…人设层生成中" : "…人设层调用中，等 API 回来") +
+        (w.lastPersona ? "…人设层生成中" : w.lastThinking ? "…思考中" : "…人设层调用中，等 API 回来") +
         "</div>"
       : "";
     // 流式草稿：尚未写入 personaMessages，挂在 lastPersona
@@ -275,8 +290,8 @@
         '<div class="persona-bubble-body md">' + replaceEmoji(window.MjMarkdown.render(w.lastPersona)) + '</div>' +
         '</div>';
     }
-    if (msgs.length || draftHtml) {
-      var html = '<div class="persona-msgs">' + pendingBanner;
+    if (msgs.length || draftHtml || thinkingHtml) {
+      var html = '<div class="persona-msgs">' + pendingBanner + thinkingHtml;
       for (var i = 0; i < msgs.length; i++) {
         var bubbleHtml =
           '<div class="persona-bubble">' +
@@ -304,6 +319,8 @@
       html += '</div>';
       pScroll.innerHTML = html;
       if (!opts || !opts.keepScroll) pScroll.scrollTop = 0;
+      var thinkEl = el("personaThinking");
+      if (thinkEl) thinkEl.scrollTop = thinkEl.scrollHeight;
       var name = state.assetName || "";
       loadImg(el("standingPanel"), assetUrl("standing", name));
     } else {

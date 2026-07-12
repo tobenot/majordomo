@@ -153,12 +153,19 @@
       case "window_persona": {
         var win = state.windows[msg.windowId];
         if (!win) break;
-        win.lastPersona = msg.text;
-        // 流式中间帧：保持 pending，只刷正文，不抢未读/不弹窗
+        // 流式中间帧：保持 pending，只刷正文/思考，不抢未读/不弹窗
         if (msg.partial) {
+          if (msg.thinking) {
+            win.lastThinking = msg.text;
+          } else {
+            win.lastPersona = msg.text;
+            win.lastThinking = "";
+          }
           if (!state.suppressed) render({ keepScroll: true });
           break;
         }
+        win.lastPersona = msg.text;
+        win.lastThinking = "";
         var isNewPersona = true;
         if (msg.personaMessages) win.personaMessages = msg.personaMessages;
         state.personaPending[msg.windowId] = false;
@@ -192,7 +199,8 @@
       case "window_persona_status":
         state.personaPending[msg.windowId] = msg.phase === "start";
         if (msg.phase === "start" && state.windows[msg.windowId]) {
-          state.windows[msg.windowId].lastPersona = ""; // 清旧稿，避免流式开头闪上一轮
+          state.windows[msg.windowId].lastPersona = "";
+          state.windows[msg.windowId].lastThinking = "";
         }
         if (state.suppressed) {
           // 缩小态不抢展开，只脉冲提示还在等人设
@@ -458,11 +466,17 @@
     el("card").classList.toggle("persona-pending", pending);
 
     var text = w.lastPersona || w.lastText || "";
+    var thinkingBlock = "";
+    if (pending && w.lastThinking && !w.lastPersona) {
+      var thinkTail = w.lastThinking.length > 2400 ? "…" + w.lastThinking.slice(-2400) : w.lastThinking;
+      thinkingBlock = '<div class="persona-thinking" id="personaThinking">' + escapeHtml(thinkTail) + "</div>";
+    }
     if (pending) {
       el("persona").innerHTML =
         '<div class="persona-pending-banner">' +
-        (text ? "…人设层生成中" : "…人设层调用中，等 API 回来") +
+        (text ? "…人设层生成中" : w.lastThinking ? "…思考中" : "…人设层调用中，等 API 回来") +
         "</div>" +
+        thinkingBlock +
         (text ? replaceEmoji(window.MjMarkdown.render(text)) : "");
     } else {
       el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
@@ -472,6 +486,8 @@
     if (!opts || !opts.keepScroll) {
       el("personaWrap").scrollTop = 0;
     }
+    var thinkEl = el("personaThinking");
+    if (thinkEl) thinkEl.scrollTop = thinkEl.scrollHeight;
 
     // 立绘下方快捷面板
     renderQuickActions(text);

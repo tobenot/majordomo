@@ -18,7 +18,10 @@ export interface PersonaEngine {
   readonly mode: string;
   /**
    * 把结构化结果总结成人话汇报。
-   * @param onDelta 可选：累计文本回调（流式）；模板人设不会调用。
+   * @param onDelta 可选：累计文本回调（流式）；phase=reasoning 仅心跳展示，终稿只用 content。
    */
-  report(input: PersonaInput, onDelta?: (accumulated: string) => void): Promise<string>;
+  report(
+    input: PersonaInput,
+    onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  ): Promise<string>;
 }

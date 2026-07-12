@@ -5,6 +5,8 @@ const log = createLogger("persona:api");
 
 type PersonaApiFormat = "openai" | "anthropic";
 
+type StreamPiece = { content: string; reasoning: string };
+
 function parseApiFormat(value: string | undefined): PersonaApiFormat {
   const raw = value?.trim().toLowerCase();
   if (!raw || raw === "openai") return "openai";
@@ -13,42 +15,38 @@ function parseApiFormat(value: string | undefined): PersonaApiFormat {
   return "openai";
 }
 
-function textFromContent(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-  if (!Array.isArray(value)) return "";
-  return value
-    .map((part) => {
-      if (typeof part === "string") return part;
-      if (part && typeof part === "object" && "text" in part && typeof (part as { text?: unknown }).text === "string") {
-        return (part as { text: string }).text;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n")
-    .trim();
+/** OpenAI chat.completion.chunk → content + reasoning 增量。 */
+export function pieceFromOpenAiChunk(obj: unknown): StreamPiece {
+  const d = (obj as { choices?: Array<{ delta?: Record<string, unknown> }> })?.choices?.[0]?.delta;
+  const content = typeof d?.content === "string" ? d.content : "";
+  // hy3 / DeepSeek-R1 等：reasoning 或 reasoning_content
+  const reasoning =
+    typeof d?.reasoning === "string"
+      ? d.reasoning
+      : typeof d?.reasoning_content === "string"
+        ? d.reasoning_content
+        : "";
+  return { content, reasoning };
 }
 
-/** OpenAI chat.completion.chunk → content 增量（忽略 reasoning）。 */
-export function deltaFromOpenAiChunk(obj: unknown): string {
-  const c = (obj as { choices?: Array<{ delta?: { content?: unknown } }> })?.choices?.[0]?.delta?.content;
-  return typeof c === "string" ? c : "";
-}
-
-/** Anthropic Messages SSE → text_delta 增量。 */
-export function deltaFromAnthropicChunk(obj: unknown): string {
-  const o = obj as { type?: string; delta?: { type?: string; text?: unknown } };
-  if (o?.type === "content_block_delta" && o.delta?.type === "text_delta" && typeof o.delta.text === "string") {
-    return o.delta.text;
+/** Anthropic Messages SSE → text_delta / thinking_delta。 */
+export function pieceFromAnthropicChunk(obj: unknown): StreamPiece {
+  const o = obj as { type?: string; delta?: { type?: string; text?: unknown; thinking?: unknown } };
+  if (o?.type !== "content_block_delta" || !o.delta) return { content: "", reasoning: "" };
+  if (o.delta.type === "text_delta" && typeof o.delta.text === "string") {
+    return { content: o.delta.text, reasoning: "" };
   }
-  return "";
+  if (o.delta.type === "thinking_delta" && typeof o.delta.thinking === "string") {
+    return { content: "", reasoning: o.delta.thinking };
+  }
+  return { content: "", reasoning: "" };
 }
 
 async function readSseStream(
   resp: Response,
   signal: AbortSignal,
-  pickDelta: (obj: unknown) => string,
-  onDelta?: (accumulated: string) => void,
+  pickPiece: (obj: unknown) => StreamPiece,
+  onDelta?: (accumulated: string, phase: "reasoning" | "content") => void,
 ): Promise<string> {
   if (!resp.ok) {
     const t = await resp.text().catch(() => "");
@@ -59,7 +57,8 @@ async function readSseStream(
   const reader = resp.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
-  let full = "";
+  let content = "";
+  let reasoning = "";
 
   while (true) {
     if (signal.aborted) throw new DOMException("This operation was aborted", "AbortError");
@@ -79,14 +78,19 @@ async function readSseStream(
       } catch {
         continue;
       }
-      const piece = pickDelta(obj);
-      if (!piece) continue;
-      full += piece;
-      onDelta?.(full);
+      const piece = pickPiece(obj);
+      if (piece.reasoning) {
+        reasoning += piece.reasoning;
+        onDelta?.(reasoning, "reasoning");
+      }
+      if (piece.content) {
+        content += piece.content;
+        onDelta?.(content, "content");
+      }
     }
   }
-  if (!full.trim()) throw new Error("API 返回空内容");
-  return full;
+  if (!content.trim()) throw new Error("API 返回空内容");
+  return content;
 }
 
 export class ApiPersona implements PersonaEngine {
@@ -145,7 +149,11 @@ export class ApiPersona implements PersonaEngine {
     return base.endsWith("/v1") ? `${base}/messages` : `${base}/v1/messages`;
   }
 
-  private async reportOpenAi(input: PersonaInput, signal: AbortSignal, onDelta?: (accumulated: string) => void): Promise<string> {
+  private async reportOpenAi(
+    input: PersonaInput,
+    signal: AbortSignal,
+    onDelta?: (accumulated: string, phase: "reasoning" | "content") => void,
+  ): Promise<string> {
     const resp = await fetch(`${this.baseUrl()}/chat/completions`, {
       method: "POST",
       headers: {
@@ -165,10 +173,14 @@ export class ApiPersona implements PersonaEngine {
       }),
       signal,
     });
-    return readSseStream(resp, signal, deltaFromOpenAiChunk, onDelta);
+    return readSseStream(resp, signal, pieceFromOpenAiChunk, onDelta);
   }
 
-  private async reportAnthropic(input: PersonaInput, signal: AbortSignal, onDelta?: (accumulated: string) => void): Promise<string> {
+  private async reportAnthropic(
+    input: PersonaInput,
+    signal: AbortSignal,
+    onDelta?: (accumulated: string, phase: "reasoning" | "content") => void,
+  ): Promise<string> {
     const resp = await fetch(this.anthropicMessagesUrl(), {
       method: "POST",
       headers: {
@@ -188,10 +200,13 @@ export class ApiPersona implements PersonaEngine {
       }),
       signal,
     });
-    return readSseStream(resp, signal, deltaFromAnthropicChunk, onDelta);
+    return readSseStream(resp, signal, pieceFromAnthropicChunk, onDelta);
   }
 
-  async report(input: PersonaInput, onDelta?: (accumulated: string) => void): Promise<string> {
+  async report(
+    input: PersonaInput,
+    onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  ): Promise<string> {
     const timeoutMs = 300_000; // 5min：推理模型（hy3 等）常超 30s
     const controller = new AbortController();
     const started = Date.now();
@@ -223,10 +238,12 @@ if (require.main === module) {
   const assert = (cond: unknown, msg: string) => {
     if (!cond) throw new Error(msg);
   };
-  assert(deltaFromOpenAiChunk({ choices: [{ delta: { content: "喵" } }] }) === "喵", "openai content");
-  assert(deltaFromOpenAiChunk({ choices: [{ delta: { reasoning: "think" } }] }) === "", "skip reasoning");
-  assert(deltaFromAnthropicChunk({ type: "content_block_delta", delta: { type: "text_delta", text: "嗨" } }) === "嗨", "anthropic text");
-  assert(deltaFromAnthropicChunk({ type: "message_start" }) === "", "skip other events");
+  assert(pieceFromOpenAiChunk({ choices: [{ delta: { content: "喵" } }] }).content === "喵", "openai content");
+  assert(pieceFromOpenAiChunk({ choices: [{ delta: { reasoning: "think" } }] }).reasoning === "think", "openai reasoning");
+  assert(pieceFromOpenAiChunk({ choices: [{ delta: { reasoning_content: "r" } }] }).reasoning === "r", "openai reasoning_content");
+  assert(pieceFromAnthropicChunk({ type: "content_block_delta", delta: { type: "text_delta", text: "嗨" } }).content === "嗨", "anthropic text");
+  assert(pieceFromAnthropicChunk({ type: "content_block_delta", delta: { type: "thinking_delta", thinking: "想" } }).reasoning === "想", "anthropic thinking");
+  assert(pieceFromAnthropicChunk({ type: "message_start" }).content === "", "skip other events");
   // eslint-disable-next-line no-console
   console.error("persona sse selfcheck ok");
 }

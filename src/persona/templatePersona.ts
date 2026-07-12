@@ -12,7 +12,10 @@ export class TemplatePersona implements PersonaEngine {
     private projectInstructions?: string,
   ) {}
 
-  async report(input: PersonaInput, _onDelta?: (accumulated: string) => void): Promise<string> {
+  async report(
+    input: PersonaInput,
+    _onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  ): Promise<string> {
     const { workerText } = input;
     const clean = workerText.replace(/\s+/g, " ").trim();
     const brief = clean.length > 240 ? clean.slice(0, 240) + "…" : clean;
