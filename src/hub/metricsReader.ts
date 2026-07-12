@@ -185,3 +185,70 @@ function extractToolNames(content?: Array<{ type?: string; name?: string }>): st
     .filter((c): c is { type: string; name: string } => c.type === "tool_use" && typeof c.name === "string")
     .map((c) => c.name);
 }
+
+/** Cursor / CC transcript 里拼出 content 文本块。 */
+function joinContentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const b = block as { type?: string; text?: string };
+    if (b.type === "text" && typeof b.text === "string") parts.push(b.text);
+  }
+  return parts.join("");
+}
+
+/**
+ * 从 transcript JSONL 尾部取最近一条 assistant 正文（UTF-8 读盘）。
+ * Cursor Windows hook stdin 会弄坏中文；磁盘 transcript 是完好 UTF-8（官方建议 workaround）。
+ */
+export function readLastAssistantText(transcriptPath: string, maxBytes = 512 * 1024): string | null {
+  try {
+    if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
+    const stat = fs.statSync(transcriptPath);
+    if (stat.size <= 0) return null;
+    const start = stat.size > maxBytes ? stat.size - maxBytes : 0;
+    const fd = fs.openSync(transcriptPath, "r");
+    try {
+      const len = stat.size - start;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, start);
+      const text = buf.toString("utf8");
+      const lines = text.split(/\r?\n/);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        let obj: {
+          role?: string;
+          type?: string;
+          message?: { content?: unknown };
+        };
+        try {
+          obj = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const isAssistant =
+          obj.role === "assistant" || obj.type === "assistant";
+        if (!isAssistant || !obj.message) continue;
+        const t = joinContentText(obj.message.content).trim();
+        if (t) return t;
+      }
+    } finally {
+      try { fs.closeSync(fd); } catch { /* best-effort */ }
+    }
+  } catch (e) {
+    log.debug(`读 transcript 正文失败: ${(e as Error).message}`);
+  }
+  return null;
+}
+
+/** stdin 中文被系统代码页弄坏后的典型痕迹（含 U+FFFD / utf8-as-gbk 碎屑）。 */
+export function looksCorruptText(text: string | undefined | null): boolean {
+  if (!text) return true;
+  if (text.includes("\uFFFD")) return true;
+  // 浣犫ソ闇瑕壝 — classic GBK misread crumbs (code points, no CJK source dependency)
+  const markers = ["\u6D63", "\u72B2", "\u30BD", "\u95C7", "\u7455", "\u579C"];
+  return markers.some((m) => text.includes(m));
+}

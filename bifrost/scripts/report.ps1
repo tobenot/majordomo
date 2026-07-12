@@ -15,7 +15,8 @@ $ErrorActionPreference = 'SilentlyContinue'
 
 # CC / Cursor feed UTF-8 stdin. On Chinese Windows, [Console]::In + InputEncoding
 # is NOT reliable for redirected hooks (pipe may already be bound to GBK) — that
-# turns 你好 into 浣犲ソ before ConvertFrom-Json. Always read raw bytes as UTF-8.
+# turns Chinese into classic mojibake before ConvertFrom-Json. Always read raw
+# bytes as UTF-8; if the host already mojibake'd, Repair-Utf8Mojibake undoes it.
 function Read-StdinUtf8 {
     try {
         $stdin = [Console]::OpenStandardInput()
@@ -35,7 +36,31 @@ function Read-StdinUtf8 {
     }
 }
 
+# Undo UTF-8-bytes-read-as-GBK: GBK.GetBytes(mojibake) -> UTF8.GetString.
+# Gate = codepoints of classic crumbs (ASCII-only source — no CJK literals).
+# Do NOT abort on U+FFFD: partial repair beats keeping the full mojibake blob
+# (old FFFD check discarded good repairs and re-uploaded garbage to the hub).
+function Repair-Utf8Mojibake {
+    param([string]$s)
+    if ([string]::IsNullOrEmpty($s)) { return $s }
+    $markers = [char[]]@(0x6D63, 0x72B2, 0x30BD, 0x95C7, 0x7455, 0x579C)
+    $hit = $false
+    foreach ($c in $markers) {
+        if ($s.IndexOf($c) -ge 0) { $hit = $true; break }
+    }
+    if (-not $hit) { return $s }
+    try {
+        # Default CP936 decoder (not ReplacementFallback): we need its 2-byte grouping
+        # so UTF-8 byte runs become classic mojibake chars that round-trip.
+        $gbk = [System.Text.Encoding]::GetEncoding(936)
+        $utf8 = New-Object System.Text.UTF8Encoding $false, $false
+        return $utf8.GetString($gbk.GetBytes($s))
+    } catch { return $s }
+}
+
 $raw = Read-StdinUtf8
+# Repair whole JSON before parse so every string field is fixed.
+$raw = Repair-Utf8Mojibake $raw
 # Cursor (and some hosts) may prefix junk before '{'; strip so ConvertFrom-Json works.
 if (-not [string]::IsNullOrWhiteSpace($raw)) {
     $brace = $raw.IndexOf('{')
@@ -116,27 +141,102 @@ function Pick-Str {
     return [string]$b
 }
 
-# If stdin was still decoded as CP936, Chinese becomes 浣犲ソ etc. Undo that.
-function Repair-Utf8Mojibake {
-    param([string]$s)
-    if ([string]::IsNullOrEmpty($s)) { return $s }
-    if ($s -notmatch '[\u6D63\u72B2\u30BD\u95C7\u7455\u579C]') { return $s }
-    try {
-        $gbk = [System.Text.Encoding]::GetEncoding(936)
-        $utf8 = New-Object System.Text.UTF8Encoding $false, $false
-        $fixed = $utf8.GetString($gbk.GetBytes($s))
-        if ($fixed.IndexOf([char]0xFFFD) -ge 0) { return $s }
-        return $fixed
-    } catch { return $s }
-}
-
 function Norm-Text {
     param([string]$s)
     return (Trim-Text (Repair-Utf8Mojibake $s))
 }
 
+# Cursor Windows known bug: hook stdin non-ASCII is corrupted (system ANSI code
+# page) BEFORE the script runs. transcript_path JSONL on disk is valid UTF-8.
+# Prefer file text over stdin for Stop / UserPromptSubmit. Repair stays fallback.
+# See forum: "Windows Cursor Hooks stdin corrupts UTF-8".
+function Join-ContentText {
+    param($content)
+    if ($null -eq $content) { return '' }
+    if ($content -is [string]) { return [string]$content }
+    $parts = New-Object System.Collections.Generic.List[string]
+    try {
+        foreach ($block in @($content)) {
+            if ($null -eq $block) { continue }
+            if ([string]$block.type -eq 'text' -and $block.text) {
+                $parts.Add([string]$block.text)
+            }
+        }
+    } catch { }
+    return ($parts -join '')
+}
+
+function Get-TranscriptTailLines {
+    param([string]$path, [int]$maxBytes = 524288)
+    if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path)) { return @() }
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        if ($null -eq $bytes -or $bytes.Length -eq 0) { return @() }
+        $start = 0
+        if ($bytes.Length -gt $maxBytes) { $start = $bytes.Length - $maxBytes }
+        $enc = New-Object System.Text.UTF8Encoding $false, $false
+        $text = $enc.GetString($bytes, $start, $bytes.Length - $start)
+        return ($text -split "`r?`n")
+    } catch { return @() }
+}
+
+function Get-LastAssistantFromTranscript {
+    param([string]$path)
+    $lines = Get-TranscriptTailLines $path
+    for ($i = $lines.Length - 1; $i -ge 0; $i--) {
+        $line = [string]$lines[$i]
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $obj = $null
+        try { $obj = $line | ConvertFrom-Json } catch { continue }
+        if ($null -eq $obj) { continue }
+        # Cursor: { role: assistant, message: { content: [...] } }
+        if ([string]$obj.role -eq 'assistant' -and $obj.message) {
+            $t = Join-ContentText $obj.message.content
+            if (-not [string]::IsNullOrWhiteSpace($t)) { return $t }
+        }
+        # Claude Code: { type: assistant, message: { content: ... } }
+        if ([string]$obj.type -eq 'assistant' -and $obj.message) {
+            $t = Join-ContentText $obj.message.content
+            if (-not [string]::IsNullOrWhiteSpace($t)) { return $t }
+        }
+    }
+    return ''
+}
+
+function Get-LastUserFromTranscript {
+    param([string]$path)
+    $lines = Get-TranscriptTailLines $path
+    for ($i = $lines.Length - 1; $i -ge 0; $i--) {
+        $line = [string]$lines[$i]
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $obj = $null
+        try { $obj = $line | ConvertFrom-Json } catch { continue }
+        if ($null -eq $obj) { continue }
+        $t = ''
+        if ([string]$obj.role -eq 'user' -and $obj.message) {
+            $t = Join-ContentText $obj.message.content
+        } elseif ([string]$obj.type -eq 'user' -and $obj.message) {
+            $t = Join-ContentText $obj.message.content
+        }
+        if ([string]::IsNullOrWhiteSpace($t)) { continue }
+        # Cursor wraps the visible prompt in <user_query>...</user_query>
+        if ($t -match '(?s)<user_query>\s*(.*?)\s*</user_query>') {
+            return [string]$Matches[1]
+        }
+        return $t
+    }
+    return ''
+}
+
+function Pick-TextPreferTranscript {
+    param([string]$stdinText, [string]$fileText)
+    if (-not [string]::IsNullOrWhiteSpace($fileText)) { return (Norm-Text $fileText) }
+    return (Norm-Text $stdinText)
+}
+
 $payload = [ordered]@{}
 $mappedEvent = $null
+$transcriptPath = [string]$evt.transcript_path
 switch ($eventName) {
     'SessionStart'  {
         $mappedEvent = 'session_start'
@@ -149,9 +249,13 @@ switch ($eventName) {
     }
     'Stop'          {
         $mappedEvent = 'stop'
-        # CC: last_assistant_message; Cursor afterAgentResponse: text
-        $payload.text = Norm-Text (Pick-Str $evt.last_assistant_message $evt.text)
-        $payload.transcriptPath = [string]$evt.transcript_path
+        # Prefer transcript (UTF-8 on disk). Stdin Chinese is unreliable on Cursor+Win.
+        $payload.text = Pick-TextPreferTranscript `
+            (Pick-Str $evt.last_assistant_message $evt.text) `
+            (Get-LastAssistantFromTranscript $transcriptPath)
+        if (-not [string]::IsNullOrWhiteSpace($transcriptPath)) {
+            $payload.transcriptPath = $transcriptPath
+        }
     }
     'Notification'  {
         $mappedEvent = 'notification'
@@ -174,7 +278,12 @@ switch ($eventName) {
     }
     'UserPromptSubmit' {
         $mappedEvent = 'user_prompt'
-        $payload.text = Norm-Text ([string]$evt.prompt)
+        $payload.text = Pick-TextPreferTranscript `
+            ([string]$evt.prompt) `
+            (Get-LastUserFromTranscript $transcriptPath)
+        if (-not [string]::IsNullOrWhiteSpace($transcriptPath)) {
+            $payload.transcriptPath = $transcriptPath
+        }
     }
     'PreToolUse' {
         $toolName = [string]$evt.tool_name

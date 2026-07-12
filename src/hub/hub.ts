@@ -10,7 +10,7 @@ import { PersonaEngine } from "../persona/types";
 import { NotifierBus } from "../notify/factory";
 import { ServerMessage } from "../protocol/messages";
 import { createLogger } from "../core/logger";
-import { readIncremental, ReadIncrementalResult } from "./metricsReader";
+import { readIncremental, ReadIncrementalResult, readLastAssistantText, looksCorruptText } from "./metricsReader";
 import { MetricsCursor, SessionMetrics } from "./sessionMetrics";
 
 const log = createLogger("hub");
@@ -80,7 +80,12 @@ export class HubService {
       }
 
       case "stop": {
-        const text = (p.text ?? "").trim();
+        let text = (p.text ?? "").trim();
+        // Cursor Win: stdin 中文常已损坏；transcript 盘上是真 UTF-8。空/乱码则改读文件。
+        if (p.transcriptPath && looksCorruptText(text)) {
+          const fromFile = readLastAssistantText(p.transcriptPath);
+          if (fromFile) text = fromFile.trim();
+        }
         const w = this.windows.record({
           windowId: env.windowId, cwd, event: env.event,
           state: "idle", summary: summarize(text) || "完成一个回合", lastText: text,

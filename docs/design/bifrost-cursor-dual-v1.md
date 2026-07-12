@@ -69,6 +69,12 @@ Cursor 文档：
 CC 的 `Stop` = 回合结束 + 全文。Cursor 侧用 `afterAgentResponse` 对齐「带全文的 stop 上报 + 本地弹窗」。  
 v1 **不**再挂 Cursor `stop`，避免与 `afterAgentResponse` 双响弹窗。若实测发现每回合多次 `afterAgentResponse`（工具间穿插），再加节流或改挂 `stop`+读 transcript；先探针、后改。
 
+### 3.2 Cursor Windows：正文不信 stdin，信 transcript
+
+Cursor 在非 UTF-8 系统代码页（中文 GBK）下，hook **stdin 写入前**就会弄坏非 ASCII（官方确认的 bug）。GBK「反解」修复是有损的（如「看」→`�?`），不能当主路径。
+
+**定路**：`report.ps1` 对 `Stop` / `UserPromptSubmit` **优先从 `transcript_path` JSONL（盘上 UTF-8）取正文**；stdin 的 `text`/`prompt` 仅作无 transcript 时的回退。中枢对乱码/空 `text` 再兜一层读 transcript。ASCII 字段（路径、id）stdin 仍可用。
+
 ### 3.2 windowId / cwd
 
 | 字段 | CC | Cursor |
