@@ -1,7 +1,8 @@
 # report.ps1 - Bifrost formal reporter (design bifrost-hub-v1.md 2.3 / path B)
+# Dual host: Claude Code + Cursor (design bifrost-cursor-dual-v1.md).
 # One script owns everything a single hook event needs:
 #   1. read hook JSON from stdin (UTF-8 first, else Chinese in last_assistant_message garbles)
-#   2. dispatch by hook_event_name, shape the 2.5 envelope
+#   2. normalize host event names, shape the 2.5 envelope
 #   3. POST to the hub /ingest (bounded timeout, best-effort)
 #   4. on failure cache to disk and drain the backlog next time the hub answers
 #   5. local side effect: beep on Stop, full toolkit popup on Notification
@@ -12,13 +13,14 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-# CC feeds UTF-8 stdin; PS defaults to the local code page (GBK) and would mangle
-# the Chinese in last_assistant_message. Fix encoding before reading a single byte.
+# CC / Cursor feed UTF-8 stdin; PS defaults to the local code page (GBK) and would mangle
+# Chinese in last_assistant_message / text. Fix encoding before reading a single byte.
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $raw = [Console]::In.ReadToEnd()
 
-# Plugin root: CC injects CLAUDE_PLUGIN_ROOT; fall back to the parent of scripts/.
-$root = $env:CLAUDE_PLUGIN_ROOT
+# Plugin root: Cursor then CC env; fall back to the parent of scripts/.
+$root = $env:CURSOR_PLUGIN_ROOT
+if ([string]::IsNullOrWhiteSpace($root)) { $root = $env:CLAUDE_PLUGIN_ROOT }
 if ([string]::IsNullOrWhiteSpace($root)) { $root = Split-Path -Parent $PSScriptRoot }
 
 # ---------------------------------------------------------------------------
@@ -59,6 +61,16 @@ if ($null -eq $evt) { exit 0 }
 $eventName = [string]$evt.hook_event_name
 if ([string]::IsNullOrWhiteSpace($eventName)) { exit 0 }
 
+# Cursor event aliases -> CC names so the switch below stays one table.
+# afterAgentResponse is Cursor's text-bearing stand-in for CC Stop (Cursor stop has no text).
+switch ($eventName) {
+    'sessionStart'         { $eventName = 'SessionStart' }
+    'sessionEnd'           { $eventName = 'SessionEnd' }
+    'afterAgentResponse'   { $eventName = 'Stop' }
+    'beforeSubmitPrompt'   { $eventName = 'UserPromptSubmit' }
+    'preToolUse'           { $eventName = 'PreToolUse' }
+}
+
 # ---------------------------------------------------------------------------
 # Shape the 2.5 envelope. payload varies by event.
 # ---------------------------------------------------------------------------
@@ -72,14 +84,29 @@ function Trim-Text {
     return $s
 }
 
+function Pick-Str {
+    param([object]$a, [object]$b)
+    $s = [string]$a
+    if (-not [string]::IsNullOrWhiteSpace($s)) { return $s }
+    return [string]$b
+}
+
 $payload = [ordered]@{}
 $mappedEvent = $null
 switch ($eventName) {
-    'SessionStart'  { $mappedEvent = 'session_start'; $payload.source = [string]$evt.source }
-    'SessionEnd'    { $mappedEvent = 'session_end';   $payload.reason = [string]$evt.reason }
+    'SessionStart'  {
+        $mappedEvent = 'session_start'
+        # CC: source; Cursor: composer_mode (agent|ask|edit)
+        $payload.source = Pick-Str $evt.source $evt.composer_mode
+    }
+    'SessionEnd'    {
+        $mappedEvent = 'session_end'
+        $payload.reason = Pick-Str $evt.reason $evt.final_status
+    }
     'Stop'          {
         $mappedEvent = 'stop'
-        $payload.text = Trim-Text ([string]$evt.last_assistant_message)
+        # CC: last_assistant_message; Cursor afterAgentResponse: text
+        $payload.text = Trim-Text (Pick-Str $evt.last_assistant_message $evt.text)
         $payload.transcriptPath = [string]$evt.transcript_path
     }
     'Notification'  {
@@ -123,10 +150,22 @@ switch ($eventName) {
     default         { $mappedEvent = $eventName.ToLower() }  # forward unknowns raw-ish
 }
 
+# windowId: CC session_id; Cursor session_id or conversation_id
+$windowId = Pick-Str $evt.session_id $evt.conversation_id
+# cwd: prefer explicit cwd; Cursor often only has workspace_roots[0]
+$cwd = [string]$evt.cwd
+if ([string]::IsNullOrWhiteSpace($cwd)) {
+    try {
+        if ($evt.workspace_roots -and $evt.workspace_roots.Count -gt 0) {
+            $cwd = [string]$evt.workspace_roots[0]
+        }
+    } catch { }
+}
+
 $envelope = [ordered]@{
-    windowId = [string]$evt.session_id
+    windowId = $windowId
     event    = $mappedEvent
-    cwd      = [string]$evt.cwd
+    cwd      = $cwd
     ts       = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     payload  = $payload
 }
@@ -332,7 +371,7 @@ if (Test-HubReachable) {
 
 # ---------------------------------------------------------------------------
 # Status badge file — bifrost-statusline.ps1 reads this to show a rainbow
-# [BIFROST] badge in the Claude Code statusline. Hue cycles 0-6 on every
+# [BIFROST] badge in the CC / Cursor CLI statusline. Hue cycles 0-6 on every
 # successful Stop POST (multi-window races are harmless: color just jumps).
 # ---------------------------------------------------------------------------
 $statusFile = Join-Path $cacheDir 'status.json'
