@@ -441,17 +441,17 @@
     if (!u) return "";
     var bits = [];
     if (u.usedPercent != null) {
-      var line = "ctx " + Math.round(u.usedPercent) + "%";
-      if (u.windowSize) line += " · " + fmtTokens(u.windowSize);
+      var line = "context " + Math.round(u.usedPercent) + "%";
+      if (u.windowSize) line += " / " + fmtTokens(u.windowSize);
       bits.push(line);
     } else if (u.windowSize) {
-      bits.push(fmtTokens(u.windowSize));
+      bits.push("窗口 " + fmtTokens(u.windowSize));
     }
     if (u.lastInputTokens != null || u.lastOutputTokens != null) {
-      bits.push("本轮 " + fmtTokens(u.lastInputTokens || 0) + "/" + fmtTokens(u.lastOutputTokens || 0));
+      bits.push("本轮 输入 " + fmtTokens(u.lastInputTokens || 0) + " · 输出 " + fmtTokens(u.lastOutputTokens || 0));
     }
     if (u.totalInputTokens != null || u.totalOutputTokens != null) {
-      bits.push("累计 " + fmtTokens(u.totalInputTokens || 0) + "/" + fmtTokens(u.totalOutputTokens || 0));
+      bits.push("累计 输入 " + fmtTokens(u.totalInputTokens || 0) + " · 输出 " + fmtTokens(u.totalOutputTokens || 0));
     }
     if (!bits.length) return "";
     return '<div class="s-metrics s-usage">' + escapeHtml(bits.join(" · ")) + "</div>";
@@ -468,13 +468,13 @@
       '<div class="metrics-card">' +
       '<div class="metrics-title">上下文 / Token</div>' +
       '<div class="metrics-grid">' +
-        (u.usedPercent != null ? metricsKV("ctx%", Math.round(u.usedPercent) + "%") : "") +
+        (u.usedPercent != null ? metricsKV("context 已用", Math.round(u.usedPercent) + "%") : "") +
         (u.windowSize ? metricsKV("窗口上限", fmtTokens(u.windowSize)) : "") +
-        (u.lastInputTokens != null ? metricsKV("本轮 input", fmtTokens(u.lastInputTokens)) : "") +
-        (u.lastOutputTokens != null ? metricsKV("本轮 output", fmtTokens(u.lastOutputTokens)) : "") +
-        (u.lastCacheReadTokens != null ? metricsKV("本轮 cache_read", fmtTokens(u.lastCacheReadTokens)) : "") +
-        (u.totalInputTokens != null ? metricsKV("total input", fmtTokens(u.totalInputTokens)) : "") +
-        (u.totalOutputTokens != null ? metricsKV("total output", fmtTokens(u.totalOutputTokens)) : "") +
+        (u.lastInputTokens != null ? metricsKV("本轮输入", fmtTokens(u.lastInputTokens)) : "") +
+        (u.lastOutputTokens != null ? metricsKV("本轮输出", fmtTokens(u.lastOutputTokens)) : "") +
+        (u.lastCacheReadTokens != null ? metricsKV("本轮缓存命中", fmtTokens(u.lastCacheReadTokens)) : "") +
+        (u.totalInputTokens != null ? metricsKV("累计输入", fmtTokens(u.totalInputTokens)) : "") +
+        (u.totalOutputTokens != null ? metricsKV("累计输出", fmtTokens(u.totalOutputTokens)) : "") +
       "</div></div>"
     );
   }
@@ -484,7 +484,7 @@
     var pct = Math.round(m.missPercent * 100);
     var slow = Math.round(m.latencyMaxMs / 1000);
     var alertClass = m.missPercent > 0.6 ? " metrics-alert" : "";
-    return '<div class="s-metrics' + alertClass + '">miss ' + pct + '% · ' + m.totalRounds + '轮 · 慢峰' + slow + 's</div>';
+    return '<div class="s-metrics' + alertClass + '">cache miss ' + pct + '% · 最慢一轮 ' + slow + 's</div>';
   }
 
   function metricsDetail(m) {
@@ -493,15 +493,14 @@
       '<div class="metrics-card' + (m.missPercent > 0.6 ? ' metrics-card-alert' : '') + '">' +
       '<div class="metrics-title">会话度量</div>' +
       '<div class="metrics-grid">' +
-        metricsKV('miss%', Math.round(m.missPercent * 100) + '%') +
-        metricsKV('最近段 miss%', Math.round(m.lastSegmentMissPercent * 100) + '%') +
+        metricsKV('cache miss', Math.round(m.missPercent * 100) + '%') +
+        metricsKV('最近段 miss', Math.round(m.lastSegmentMissPercent * 100) + '%') +
         metricsKV('塌方峰值', Math.round(m.maxSingleRoundInput).toLocaleString() + ' token') +
         metricsKV('累计产出', Math.round(m.cumulativeOutputTokens).toLocaleString() + ' token') +
-        metricsKV('总轮数', String(m.totalRounds)) +
         metricsKV('会话时长', fmtDuration(m.sessionDurationMs)) +
-        metricsKV('每轮耗时中位', fmtMs(m.latencyMedianMs)) +
-        metricsKV('每轮耗时 p90', fmtMs(m.latencyP90Ms)) +
-        metricsKV('每轮耗时 max', fmtMs(m.latencyMaxMs)) +
+        metricsKV('耗时中位', fmtMs(m.latencyMedianMs)) +
+        metricsKV('耗时 p90', fmtMs(m.latencyP90Ms)) +
+        metricsKV('最慢一轮', fmtMs(m.latencyMaxMs)) +
         metricsKV('tool_use 比', Math.round(m.toolUseRatio * 100) + '%') +
         metricsKV('最长 turn', fmtMs(m.maxTurnDurationMs)) +
         metricsKV('工具报错', String(m.toolErrorCount)) +

@@ -371,7 +371,7 @@ li.window-alert .dot {
 .persona-scroll::-webkit-scrollbar-thumb:active, #windowList::-webkit-scrollbar-thumb:active, .activity::-webkit-scrollbar-thumb:active, .rail-list::-webkit-scrollbar-thumb:active { background: var(--honey-light); }
 
 /* ── 会话度量 ── */
-.s-metrics { font-size: 11px; color: var(--honey); margin-top: 2px; }
+.s-metrics { font-size: 11px; color: var(--text2); margin-top: 2px; }
 .s-metrics.metrics-alert { color: var(--alert-red); font-weight: 600; text-shadow: 0 0 6px var(--alert-red-glow); }
 .metrics-area { margin-top: 8px; }
 .metrics-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; transition: border-color 0.4s, box-shadow 0.4s; }

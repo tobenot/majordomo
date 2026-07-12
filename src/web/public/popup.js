@@ -700,15 +700,15 @@
     if (!u) return "";
     var bits = [];
     if (u.usedPercent != null) {
-      var s = "ctx " + Math.round(u.usedPercent) + "%";
-      if (u.windowSize) s += " · " + popupFmtTokens(u.windowSize);
+      var s = "context " + Math.round(u.usedPercent) + "%";
+      if (u.windowSize) s += " / " + popupFmtTokens(u.windowSize);
       bits.push(s);
     }
     if (u.lastInputTokens != null || u.lastOutputTokens != null) {
-      bits.push("本轮 " + popupFmtTokens(u.lastInputTokens || 0) + "/" + popupFmtTokens(u.lastOutputTokens || 0));
+      bits.push("本轮 输入 " + popupFmtTokens(u.lastInputTokens || 0) + " · 输出 " + popupFmtTokens(u.lastOutputTokens || 0));
     }
     if (u.totalInputTokens != null || u.totalOutputTokens != null) {
-      bits.push("Σ " + popupFmtTokens(u.totalInputTokens || 0) + "/" + popupFmtTokens(u.totalOutputTokens || 0));
+      bits.push("累计 输入 " + popupFmtTokens(u.totalInputTokens || 0) + " · 输出 " + popupFmtTokens(u.totalOutputTokens || 0));
     }
     return bits.join(" · ");
   }
@@ -716,7 +716,7 @@
     if (!m || !m.totalRounds) return "";
     var pct = Math.round(m.missPercent * 100);
     var slow = Math.round(m.latencyMaxMs / 1000);
-    return "miss " + pct + "% · " + m.totalRounds + "轮 · 慢峰" + slow + "s";
+    return "cache miss " + pct + "% · 最慢一轮 " + slow + "s";
   }
 
   function escapeAttr(s) { return escapeHtml(s).replace(/[^a-zA-Z0-9_-]/g, "_"); }

@@ -184,10 +184,10 @@ header button, header .conn { -webkit-app-region: no-drag; }
   padding-left: 14px;
 }
 .win-card-metrics {
-  font-size: 11px; color: var(--honey); padding-left: 14px; margin-top: 1px;
+  font-size: 11px; color: var(--text2); padding-left: 14px; margin-top: 1px;
 }
 .detail-metrics {
-  flex: none; padding: 6px 16px; font-size: 12px; color: var(--honey);
+  flex: none; padding: 6px 16px; font-size: 12px; color: var(--text2);
   border-top: 1px solid var(--border); background: var(--panel);
 }
 
