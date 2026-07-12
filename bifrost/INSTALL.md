@@ -173,6 +173,7 @@ Get-Content .\cache\status.json
 | 换了 clone 路径后不上报 | 再跑一次安装脚本（重写绝对路径） |
 | 中枢没开 | 会进 `cache/ingest.offline.jsonl`，中枢起来后自动补送 |
 | 弹窗没有 / 只要静音 | 改 `report.config.jsonc` 的 `notifyStop` / `popup` |
+| 中文变成「浣犲ソ」之类乱码 | 已修：`report.ps1` 按 UTF-8 原始字节读 stdin，并对 CP936 误读做恢复。请拉最新脚本后再开一轮 |
 | 非 Windows | 上报脚本可改，本地弹窗工具链目前按 Windows 做 |
 
 更多设计与事件映射：`docs/design/bifrost-cursor-dual-v1.md`。

@@ -13,11 +13,30 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-# CC / Cursor feed UTF-8 stdin; PS defaults to the local code page (GBK) and would mangle
-# Chinese in last_assistant_message / text. Fix encoding before reading a single byte.
-[Console]::InputEncoding = [System.Text.Encoding]::UTF8
-$raw = [Console]::In.ReadToEnd()
-# Cursor (and some hosts) may prefix a UTF-8 BOM or junk before '{'; strip so ConvertFrom-Json works.
+# CC / Cursor feed UTF-8 stdin. On Chinese Windows, [Console]::In + InputEncoding
+# is NOT reliable for redirected hooks (pipe may already be bound to GBK) — that
+# turns 你好 into 浣犲ソ before ConvertFrom-Json. Always read raw bytes as UTF-8.
+function Read-StdinUtf8 {
+    try {
+        $stdin = [Console]::OpenStandardInput()
+        $buf = New-Object byte[] 8192
+        $ms = New-Object System.IO.MemoryStream
+        while (($n = $stdin.Read($buf, 0, $buf.Length)) -gt 0) { $ms.Write($buf, 0, $n) }
+        $bytes = $ms.ToArray()
+        if ($null -eq $bytes -or $bytes.Length -eq 0) { return '' }
+        $enc = New-Object System.Text.UTF8Encoding $false, $false
+        $s = $enc.GetString($bytes)
+        # Strip UTF-8 BOM if present
+        if ($s.Length -gt 0 -and [int][char]$s[0] -eq 0xFEFF) { $s = $s.Substring(1) }
+        return $s
+    } catch {
+        [Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
+        return [Console]::In.ReadToEnd()
+    }
+}
+
+$raw = Read-StdinUtf8
+# Cursor (and some hosts) may prefix junk before '{'; strip so ConvertFrom-Json works.
 if (-not [string]::IsNullOrWhiteSpace($raw)) {
     $brace = $raw.IndexOf('{')
     if ($brace -gt 0) { $raw = $raw.Substring($brace) }
@@ -97,6 +116,25 @@ function Pick-Str {
     return [string]$b
 }
 
+# If stdin was still decoded as CP936, Chinese becomes 浣犲ソ etc. Undo that.
+function Repair-Utf8Mojibake {
+    param([string]$s)
+    if ([string]::IsNullOrEmpty($s)) { return $s }
+    if ($s -notmatch '[\u6D63\u72B2\u30BD\u95C7\u7455\u579C]') { return $s }
+    try {
+        $gbk = [System.Text.Encoding]::GetEncoding(936)
+        $utf8 = New-Object System.Text.UTF8Encoding $false, $false
+        $fixed = $utf8.GetString($gbk.GetBytes($s))
+        if ($fixed.IndexOf([char]0xFFFD) -ge 0) { return $s }
+        return $fixed
+    } catch { return $s }
+}
+
+function Norm-Text {
+    param([string]$s)
+    return (Trim-Text (Repair-Utf8Mojibake $s))
+}
+
 $payload = [ordered]@{}
 $mappedEvent = $null
 switch ($eventName) {
@@ -112,31 +150,31 @@ switch ($eventName) {
     'Stop'          {
         $mappedEvent = 'stop'
         # CC: last_assistant_message; Cursor afterAgentResponse: text
-        $payload.text = Trim-Text (Pick-Str $evt.last_assistant_message $evt.text)
+        $payload.text = Norm-Text (Pick-Str $evt.last_assistant_message $evt.text)
         $payload.transcriptPath = [string]$evt.transcript_path
     }
     'Notification'  {
         $mappedEvent = 'notification'
-        $payload.text = [string]$evt.message
+        $payload.text = Repair-Utf8Mojibake ([string]$evt.message)
         $payload.notificationType = [string]$evt.notification_type
     }
     'TaskCreated'   {
         $mappedEvent = 'task_created'
         $payload.taskId = [string]$evt.task_id
-        $payload.taskSubject = [string]$evt.task_subject
-        $payload.taskDesc = [string]$evt.task_description
+        $payload.taskSubject = Repair-Utf8Mojibake ([string]$evt.task_subject)
+        $payload.taskDesc = Repair-Utf8Mojibake ([string]$evt.task_description)
         $payload.taskStatus = 'created'
     }
     'TaskCompleted' {
         $mappedEvent = 'task_completed'
         $payload.taskId = [string]$evt.task_id
-        $payload.taskSubject = [string]$evt.task_subject
-        $payload.taskDesc = [string]$evt.task_description
+        $payload.taskSubject = Repair-Utf8Mojibake ([string]$evt.task_subject)
+        $payload.taskDesc = Repair-Utf8Mojibake ([string]$evt.task_description)
         $payload.taskStatus = 'completed'
     }
     'UserPromptSubmit' {
         $mappedEvent = 'user_prompt'
-        $payload.text = Trim-Text ([string]$evt.prompt)
+        $payload.text = Norm-Text ([string]$evt.prompt)
     }
     'PreToolUse' {
         $toolName = [string]$evt.tool_name
@@ -151,7 +189,7 @@ switch ($eventName) {
                 $qText = [string]$toolInput.questions[0].question
             }
         } catch { }
-        $payload.text = if ($qText) { "AskUserQuestion: $qText" } else { '等待你选择 (AskUserQuestion)' }
+        $payload.text = if ($qText) { Repair-Utf8Mojibake "AskUserQuestion: $qText" } else { '等待你选择 (AskUserQuestion)' }
     }
     default         { $mappedEvent = $eventName.ToLower() }  # forward unknowns raw-ish
 }
