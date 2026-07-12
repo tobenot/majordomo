@@ -98,6 +98,8 @@ export type ServerMessage =
   | { type: "window_offline"; windowId: string }
   /** 逐窗口人设复命（中枢的"嘴"），面板挂到对应窗口 */
   | { type: "window_persona"; windowId: string; text: string; personaMessages?: PersonaMessage[] }
+  /** 人设层 API 调用中/结束（等 OpenRouter 时让面板别干瞪眼） */
+  | { type: "window_persona_status"; windowId: string; phase: "start" | "done" }
   /** 全局待办变更（全量重推，v1 量小无妨） */
   | { type: "todos"; todos: TodoItem[] }
   /** 待验收清单变更（全量重推） */

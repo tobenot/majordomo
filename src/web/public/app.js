@@ -36,6 +36,7 @@
     current: null, // 选中的 windowId
     personaName: "中枢",
     assetNames: [],
+    personaPending: {}, // windowId -> true（人设层 API 调用中）
   };
 
   const STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
@@ -92,6 +93,9 @@
       case "window_persona":
         applyPersona(msg.windowId, msg.text, msg.personaMessages);
         break;
+      case "window_persona_status":
+        setPersonaPending(msg.windowId, msg.phase === "start");
+        break;
       case "todos":
         state.todos = msg.todos || [];
         renderTodos();
@@ -130,8 +134,15 @@
     if (!w) return;
     w.lastPersona = text;
     if (personaMessages) w.personaMessages = personaMessages;
+    state.personaPending[id] = false;
     if (state.current === id) renderDetail();
     renderWindows();
+  }
+
+  function setPersonaPending(id, pending) {
+    state.personaPending[id] = !!pending;
+    renderWindows();
+    if (state.current === id) renderDetail();
   }
 
   function sortedWindows() {
@@ -148,11 +159,12 @@
       if (w.windowId === state.current) li.className = "active";
       var hasMissAlert = w.metrics && w.metrics.missPercent > 0.6;
       if (hasMissAlert) li.classList.add("window-alert");
+      var pending = !!state.personaPending[w.windowId];
       li.innerHTML =
-        '<div class="s-name"><span class="dot ' + w.state + '"></span>' +
+        '<div class="s-name"><span class="dot ' + w.state + (pending ? " persona-pending" : "") + '"></span>' +
         escapeHtml(w.title) +
         '</div><div class="s-meta">' +
-        (STATE_LABEL[w.state] || w.state) +
+        (pending ? "人设层调用中…" : (STATE_LABEL[w.state] || w.state)) +
         " · " +
         escapeHtml(oneLine(w.lastUserText || w.lastSummary || w.lastText || "", 60)) +
         "</div>" +
@@ -221,13 +233,22 @@
     }
     el("detailTitle").textContent = w.title + "  ·  " + w.cwd;
     const sb = el("detailState");
-    sb.textContent = STATE_LABEL[w.state] || w.state;
-    sb.className = "badge state-" + w.state;
+    var pending = !!state.personaPending[w.windowId];
+    if (pending) {
+      sb.textContent = "人设层调用中…";
+      sb.className = "badge state-persona";
+    } else {
+      sb.textContent = STATE_LABEL[w.state] || w.state;
+      sb.className = "badge state-" + w.state;
+    }
 
     // 人设消息历史（气泡流，最早在上，最新在下）
     var msgs = w.personaMessages || [];
+    var pendingBanner = pending
+      ? '<div class="persona-pending-banner">…人设层调用中，等 API 回来</div>'
+      : "";
     if (msgs.length) {
-      var html = '<div class="persona-msgs">';
+      var html = '<div class="persona-msgs">' + pendingBanner;
       for (var i = 0; i < msgs.length; i++) {
         var bubbleHtml =
           '<div class="persona-bubble">' +
@@ -252,7 +273,10 @@
       var name = state.assetName || "";
       loadImg(el("standingPanel"), assetUrl("standing", name));
     } else {
-      pScroll.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';
+      pScroll.innerHTML =
+        '<div class="persona-msgs empty">' +
+        (pendingBanner || "还没有人设消息") +
+        "</div>";
     }
 
     // 会话度量 + 上下文/token

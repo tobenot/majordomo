@@ -99,7 +99,8 @@ export class ApiPersona implements PersonaEngine {
           { role: "user", content: this.userPrompt(input) },
         ],
         temperature: 0.7,
-        max_tokens: 800,
+        // ponytail: 推理模型（如 hy3）会先烧 reasoning tokens；800 常把 content 挤成 null
+        max_tokens: 4096,
       }),
       signal,
     });
@@ -121,7 +122,7 @@ export class ApiPersona implements PersonaEngine {
         ],
         messages: [{ role: "user", content: this.userPrompt(input) }],
         temperature: 0.7,
-        max_tokens: 800,
+        max_tokens: 4096,
       }),
       signal,
     });

@@ -667,6 +667,7 @@ export class TuiClient {
           this.sessionState = msg.state;
         }
         if (msg.state === "thinking") this.println(`${C.dim}…工作层思考中${C.reset}`);
+        if (msg.state === "reporting") this.println(`${C.dim}…人设层调用中${C.reset}`);
         if (msg.state === "idle" || msg.state === "error" || msg.state === "closed") {
           if (this.pendingInput && msg.sessionId === this.currentSession) {
             const text = this.pendingInput;

@@ -37,6 +37,7 @@
     personaName: "中枢",
     assetNames: [],
     unread: {},         // windowId -> true
+    personaPending: {}, // windowId -> true
     mode: "collapsed",  // 'list' | 'detail' | 'collapsed'
     suppressed: false,  // 用户点了缩小：只留头部条，不响应新事件展开
   };
@@ -155,6 +156,7 @@
         var isNewPersona = win.lastPersona !== msg.text;
         win.lastPersona = msg.text;
         if (msg.personaMessages) win.personaMessages = msg.personaMessages;
+        state.personaPending[msg.windowId] = false;
 
         if (isNewPersona) {
           state.unread[msg.windowId] = true;
@@ -182,6 +184,10 @@
         }
         break;
       }
+      case "window_persona_status":
+        state.personaPending[msg.windowId] = msg.phase === "start";
+        if (!state.suppressed) render();
+        break;
     }
   }
 
@@ -363,20 +369,23 @@
     }
     all.forEach(function (w) {
       var unread = !!state.unread[w.windowId];
-      var preview = w.lastPersona || w.lastSummary || w.lastText || "";
+      var pending = !!state.personaPending[w.windowId];
+      var preview = pending
+        ? "…人设层调用中"
+        : (w.lastPersona || w.lastSummary || w.lastText || "");
       var card = document.createElement("div");
-      card.className = "win-card" + (unread ? " unread" : "");
+      card.className = "win-card" + (unread ? " unread" : "") + (pending ? " persona-pending" : "");
       card.onclick = function () { showDetail(w.windowId); };
       var metricsLine = popupUsage(w.usage);
       var missLine = popupMetrics(w.metrics);
       var extra = [metricsLine, missLine].filter(Boolean).join(" · ");
       card.innerHTML =
         '<div class="win-card-head">' +
-          '<span class="win-card-dot" style="color:' + (unread ? 'var(--honey)' : 'var(--border)') + '">●</span>' +
+          '<span class="win-card-dot" style="color:' + (pending ? 'var(--accent2)' : unread ? 'var(--honey)' : 'var(--border)') + '">●</span>' +
           '<span class="win-card-title">' + escapeHtml(w.title || "majordomo") + "</span>" +
           '<span class="win-card-time">' + fmtTime(w.updatedAt) + "</span>" +
         "</div>" +
-        '<div class="win-card-state">' + (STATE_LABEL[w.state] || w.state) + "</div>" +
+        '<div class="win-card-state">' + (pending ? "人设层调用中…" : (STATE_LABEL[w.state] || w.state)) + "</div>" +
         (extra ? '<div class="win-card-metrics">' + escapeHtml(extra) + "</div>" : "") +
         (preview ? '<div class="win-card-preview">' + escapeHtml(preview) + "</div>" : "");
       list.appendChild(card);
@@ -414,14 +423,22 @@
     el("proj").textContent = (w.title || "majordomo");
     el("proj").title = w.cwd || "";
     toggleNavArrows(true);
-    el("time").textContent = fmtTime(w.updatedAt) + " · " + (STATE_LABEL[w.state] || w.state);
+    var pending = !!state.personaPending[w.windowId];
+    el("time").textContent = fmtTime(w.updatedAt) + " · " + (pending ? "人设层调用中…" : (STATE_LABEL[w.state] || w.state));
     el("who").textContent = state.personaName;
 
     // 未读辉光
     el("card").classList.toggle("unread", !!state.unread[state.current]);
+    el("card").classList.toggle("persona-pending", pending);
 
     var text = w.lastPersona || w.lastText || "";
-    el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
+    if (pending) {
+      el("persona").innerHTML =
+        '<div class="persona-pending-banner">…人设层调用中，等 API 回来</div>' +
+        (text ? replaceEmoji(window.MjMarkdown.render(text)) : "");
+    } else {
+      el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
+    }
 
     // 滚回顶部：先同步设一次（overflow-anchor:none 已关掉浏览器锚定），
     // 再用 rAF 兜底等布局完成后的残留偏移

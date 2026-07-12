@@ -103,6 +103,17 @@ header button, header .conn { -webkit-app-region: no-drag; }
 .conn { width: 8px; height: 8px; border-radius: 50%; background: #4a4f60; flex: none; }
 .conn.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
 .conn.off { background: #4a4f60; }
+
+.win-card.persona-pending .win-card-state { color: var(--accent2); }
+.persona-pending-banner {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--accent2);
+  border-radius: 8px;
+  color: var(--accent2);
+  font-size: 12px;
+}
+.card.persona-pending .who { color: var(--accent2); }
 .btn-min {
   -webkit-app-region: no-drag; cursor: pointer; flex: none;
   width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border);

@@ -249,6 +249,8 @@ export class HubService {
       return;
     }
     this.lastPersonaAt.set(w.windowId, now);
+    this.broadcast({ type: "window_persona_status", windowId: w.windowId, phase: "start" });
+    log.info(`persona 调用中 [${w.title}]…`);
     try {
       const text = await this.persona.report({
         userText: "",
@@ -262,6 +264,8 @@ export class HubService {
       log.info(`persona 复命 → notifier [${w.title}]: ${summarize(text)}`);
     } catch (e) {
       log.warn(`persona 复命失败（窗口 ${w.title}）: ${(e as Error).message}`);
+    } finally {
+      this.broadcast({ type: "window_persona_status", windowId: w.windowId, phase: "done" });
     }
   }
 
