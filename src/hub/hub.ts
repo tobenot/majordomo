@@ -252,11 +252,17 @@ export class HubService {
     this.broadcast({ type: "window_persona_status", windowId: w.windowId, phase: "start" });
     log.info(`persona 调用中 [${w.title}]…`);
     try {
-      const text = await this.persona.report({
-        userText: "",
-        workerText,
-        sessionName: w.title,
-      });
+      // ponytail: 流式 partial 节流，避免每个 token 刷爆 WS / 重渲 markdown
+      let lastPartialAt = 0;
+      const text = await this.persona.report(
+        { userText: "", workerText, sessionName: w.title },
+        (accumulated) => {
+          const now2 = Date.now();
+          if (now2 - lastPartialAt < 80) return;
+          lastPartialAt = now2;
+          this.broadcast({ type: "window_persona", windowId: w.windowId, text: accumulated, partial: true });
+        },
+      );
       this.windows.addPersona(w.windowId, text);
       this.broadcast({ type: "window_persona", windowId: w.windowId, text, personaMessages: w.personaMessages });
       void this.notifier.notify(`[${w.title}] ${text}`);

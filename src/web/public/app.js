@@ -91,7 +91,8 @@
         markOffline(msg.windowId);
         break;
       case "window_persona":
-        applyPersona(msg.windowId, msg.text, msg.personaMessages);
+        if (msg.partial) applyPersonaPartial(msg.windowId, msg.text);
+        else applyPersona(msg.windowId, msg.text, msg.personaMessages);
         break;
       case "window_persona_status":
         setPersonaPending(msg.windowId, msg.phase === "start");
@@ -139,8 +140,21 @@
     renderWindows();
   }
 
+  function applyPersonaPartial(id, text) {
+    const w = state.windows.find((x) => x.windowId === id);
+    if (!w) return;
+    w.lastPersona = text;
+    // 保持 pending；流式草稿挂在 lastPersona，详情里单独渲
+    if (state.current === id) renderDetail({ keepScroll: true });
+    renderWindows();
+  }
+
   function setPersonaPending(id, pending) {
     state.personaPending[id] = !!pending;
+    if (pending) {
+      const w = state.windows.find((x) => x.windowId === id);
+      if (w) w.lastPersona = ""; // 清旧稿，避免流式开头闪上一轮
+    }
     renderWindows();
     if (state.current === id) renderDetail();
   }
@@ -218,7 +232,7 @@
     loadImg(el("cgImg"), assetUrl("cg", name));
   }
 
-  function renderDetail() {
+  function renderDetail(opts) {
     const w = state.windows.find((x) => x.windowId === state.current);
     const pScroll = el("personaScroll");
     const actWrap = el("activityWrap");
@@ -245,9 +259,23 @@
     // 人设消息历史（气泡流，最早在上，最新在下）
     var msgs = w.personaMessages || [];
     var pendingBanner = pending
-      ? '<div class="persona-pending-banner">…人设层调用中，等 API 回来</div>'
+      ? '<div class="persona-pending-banner">' +
+        (w.lastPersona ? "…人设层生成中" : "…人设层调用中，等 API 回来") +
+        "</div>"
       : "";
-    if (msgs.length) {
+    // 流式草稿：尚未写入 personaMessages，挂在 lastPersona
+    var draftHtml = "";
+    if (pending && w.lastPersona) {
+      draftHtml =
+        '<div class="persona-bubble">' +
+        '<div class="persona-bubble-head">' +
+        '<span class="persona-who">' + escapeHtml(state.personaName) + '</span>' +
+        '<span class="persona-ts">生成中</span>' +
+        '</div>' +
+        '<div class="persona-bubble-body md">' + replaceEmoji(window.MjMarkdown.render(w.lastPersona)) + '</div>' +
+        '</div>';
+    }
+    if (msgs.length || draftHtml) {
       var html = '<div class="persona-msgs">' + pendingBanner;
       for (var i = 0; i < msgs.length; i++) {
         var bubbleHtml =
@@ -258,7 +286,7 @@
           '</div>' +
           '<div class="persona-bubble-body md">' + replaceEmoji(window.MjMarkdown.render(msgs[i].text)) + '</div>' +
           '</div>';
-        if (i === msgs.length - 1) {
+        if (i === msgs.length - 1 && !draftHtml) {
           html += '<div class="persona-bubble-last">';
           html += '<img class="standing-panel" id="standingPanel" src="" alt="" />';
           html += bubbleHtml;
@@ -267,9 +295,15 @@
           html += bubbleHtml;
         }
       }
+      if (draftHtml) {
+        html += '<div class="persona-bubble-last">';
+        html += '<img class="standing-panel" id="standingPanel" src="" alt="" />';
+        html += draftHtml;
+        html += '</div>';
+      }
       html += '</div>';
       pScroll.innerHTML = html;
-      pScroll.scrollTop = 0;
+      if (!opts || !opts.keepScroll) pScroll.scrollTop = 0;
       var name = state.assetName || "";
       loadImg(el("standingPanel"), assetUrl("standing", name));
     } else {

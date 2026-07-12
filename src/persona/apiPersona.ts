@@ -29,6 +29,66 @@ function textFromContent(value: unknown): string {
     .trim();
 }
 
+/** OpenAI chat.completion.chunk → content 增量（忽略 reasoning）。 */
+export function deltaFromOpenAiChunk(obj: unknown): string {
+  const c = (obj as { choices?: Array<{ delta?: { content?: unknown } }> })?.choices?.[0]?.delta?.content;
+  return typeof c === "string" ? c : "";
+}
+
+/** Anthropic Messages SSE → text_delta 增量。 */
+export function deltaFromAnthropicChunk(obj: unknown): string {
+  const o = obj as { type?: string; delta?: { type?: string; text?: unknown } };
+  if (o?.type === "content_block_delta" && o.delta?.type === "text_delta" && typeof o.delta.text === "string") {
+    return o.delta.text;
+  }
+  return "";
+}
+
+async function readSseStream(
+  resp: Response,
+  signal: AbortSignal,
+  pickDelta: (obj: unknown) => string,
+  onDelta?: (accumulated: string) => void,
+): Promise<string> {
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => "");
+    throw new Error(`HTTP ${resp.status} ${t.slice(0, 200)}`);
+  }
+  if (!resp.body) throw new Error("API 无响应体");
+
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let full = "";
+
+  while (true) {
+    if (signal.aborted) throw new DOMException("This operation was aborted", "AbortError");
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split(/\r?\n/);
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      let obj: unknown;
+      try {
+        obj = JSON.parse(data);
+      } catch {
+        continue;
+      }
+      const piece = pickDelta(obj);
+      if (!piece) continue;
+      full += piece;
+      onDelta?.(full);
+    }
+  }
+  if (!full.trim()) throw new Error("API 返回空内容");
+  return full;
+}
+
 export class ApiPersona implements PersonaEngine {
   readonly mode = "api";
 
@@ -85,7 +145,7 @@ export class ApiPersona implements PersonaEngine {
     return base.endsWith("/v1") ? `${base}/messages` : `${base}/v1/messages`;
   }
 
-  private async reportOpenAi(input: PersonaInput, signal: AbortSignal): Promise<string> {
+  private async reportOpenAi(input: PersonaInput, signal: AbortSignal, onDelta?: (accumulated: string) => void): Promise<string> {
     const resp = await fetch(`${this.baseUrl()}/chat/completions`, {
       method: "POST",
       headers: {
@@ -101,13 +161,14 @@ export class ApiPersona implements PersonaEngine {
         temperature: 0.7,
         // ponytail: 推理模型（如 hy3）会先烧 reasoning tokens；800 常把 content 挤成 null
         max_tokens: 4096,
+        stream: true,
       }),
       signal,
     });
-    return this.parseResponse(resp, (data) => textFromContent(data?.choices?.[0]?.message?.content));
+    return readSseStream(resp, signal, deltaFromOpenAiChunk, onDelta);
   }
 
-  private async reportAnthropic(input: PersonaInput, signal: AbortSignal): Promise<string> {
+  private async reportAnthropic(input: PersonaInput, signal: AbortSignal, onDelta?: (accumulated: string) => void): Promise<string> {
     const resp = await fetch(this.anthropicMessagesUrl(), {
       method: "POST",
       headers: {
@@ -123,32 +184,22 @@ export class ApiPersona implements PersonaEngine {
         messages: [{ role: "user", content: this.userPrompt(input) }],
         temperature: 0.7,
         max_tokens: 4096,
+        stream: true,
       }),
       signal,
     });
-    return this.parseResponse(resp, (data) => textFromContent(data?.content));
+    return readSseStream(resp, signal, deltaFromAnthropicChunk, onDelta);
   }
 
-  private async parseResponse(resp: Response, pickText: (data: any) => string): Promise<string> {
-    if (!resp.ok) {
-      const t = await resp.text().catch(() => "");
-      throw new Error(`HTTP ${resp.status} ${t.slice(0, 200)}`);
-    }
-    const data = (await resp.json()) as any;
-    const text = pickText(data);
-    if (!text) throw new Error("API 返回空内容");
-    return text;
-  }
-
-  async report(input: PersonaInput): Promise<string> {
+  async report(input: PersonaInput, onDelta?: (accumulated: string) => void): Promise<string> {
     const timeoutMs = 300_000; // 5min：推理模型（hy3 等）常超 30s
     const controller = new AbortController();
     const started = Date.now();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return this.apiFormat === "anthropic"
-        ? await this.reportAnthropic(input, controller.signal)
-        : await this.reportOpenAi(input, controller.signal);
+        ? await this.reportAnthropic(input, controller.signal, onDelta)
+        : await this.reportOpenAi(input, controller.signal, onDelta);
     } catch (e) {
       const err = e as Error;
       const elapsed = Date.now() - started;
@@ -167,3 +218,15 @@ export class ApiPersona implements PersonaEngine {
   }
 }
 
+// ponytail: SSE 增量解析自检——改 extract 时先跑这个
+if (require.main === module) {
+  const assert = (cond: unknown, msg: string) => {
+    if (!cond) throw new Error(msg);
+  };
+  assert(deltaFromOpenAiChunk({ choices: [{ delta: { content: "喵" } }] }) === "喵", "openai content");
+  assert(deltaFromOpenAiChunk({ choices: [{ delta: { reasoning: "think" } }] }) === "", "skip reasoning");
+  assert(deltaFromAnthropicChunk({ type: "content_block_delta", delta: { type: "text_delta", text: "嗨" } }) === "嗨", "anthropic text");
+  assert(deltaFromAnthropicChunk({ type: "message_start" }) === "", "skip other events");
+  // eslint-disable-next-line no-console
+  console.error("persona sse selfcheck ok");
+}

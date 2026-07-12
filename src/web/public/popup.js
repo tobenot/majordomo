@@ -153,8 +153,13 @@
       case "window_persona": {
         var win = state.windows[msg.windowId];
         if (!win) break;
-        var isNewPersona = win.lastPersona !== msg.text;
         win.lastPersona = msg.text;
+        // 流式中间帧：保持 pending，只刷正文，不抢未读/不弹窗
+        if (msg.partial) {
+          if (!state.suppressed) render({ keepScroll: true });
+          break;
+        }
+        var isNewPersona = true;
         if (msg.personaMessages) win.personaMessages = msg.personaMessages;
         state.personaPending[msg.windowId] = false;
 
@@ -186,6 +191,9 @@
       }
       case "window_persona_status":
         state.personaPending[msg.windowId] = msg.phase === "start";
+        if (msg.phase === "start" && state.windows[msg.windowId]) {
+          state.windows[msg.windowId].lastPersona = ""; // 清旧稿，避免流式开头闪上一轮
+        }
         if (state.suppressed) {
           // 缩小态不抢展开，只脉冲提示还在等人设
           if (msg.phase === "start") pulse();
@@ -329,8 +337,8 @@
   }
 
   // ── 渲染 ────────────────────────────────────────────────
-  function render() {
-    if (state.mode === "detail") renderDetail();
+  function render(opts) {
+    if (state.mode === "detail") renderDetail(opts);
     else if (state.mode === "list") renderList();
     else renderCollapsed();
   }
@@ -430,7 +438,7 @@
     showDetail(list[next].windowId);
   }
 
-  function renderDetail() {
+  function renderDetail(opts) {
     el("card").classList.remove("collapsed");
     el("listWrap").style.display = "none";
     el("detailWrap").style.display = "";
@@ -452,15 +460,18 @@
     var text = w.lastPersona || w.lastText || "";
     if (pending) {
       el("persona").innerHTML =
-        '<div class="persona-pending-banner">…人设层调用中，等 API 回来</div>' +
+        '<div class="persona-pending-banner">' +
+        (text ? "…人设层生成中" : "…人设层调用中，等 API 回来") +
+        "</div>" +
         (text ? replaceEmoji(window.MjMarkdown.render(text)) : "");
     } else {
       el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
     }
 
-    // 滚回顶部：先同步设一次（overflow-anchor:none 已关掉浏览器锚定），
-    // 再用 rAF 兜底等布局完成后的残留偏移
-    el("personaWrap").scrollTop = 0;
+    // 流式刷新时别把滚动条拽回顶；首屏/终稿再归零
+    if (!opts || !opts.keepScroll) {
+      el("personaWrap").scrollTop = 0;
+    }
 
     // 立绘下方快捷面板
     renderQuickActions(text);
@@ -497,11 +508,14 @@
     renderMore();
 
     // 切窗口后滚回顶部（rAF 等布局完成，否则 scrollTop=0 会被后续重排冲掉）
-    requestAnimationFrame(function () {
-      el("personaWrap").scrollTop = 0;
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    });
+    // 流式 keepScroll 时跳过，否则每帧把你拽回顶
+    if (!opts || !opts.keepScroll) {
+      requestAnimationFrame(function () {
+        el("personaWrap").scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      });
+    }
   }
 
   function renderMore() {
