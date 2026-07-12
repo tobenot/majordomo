@@ -448,13 +448,13 @@
       bits.push("窗口 " + fmtTokens(u.windowSize));
     }
     if (u.lastInputTokens != null || u.lastOutputTokens != null) {
-      bits.push("本轮 输入 " + fmtTokens(u.lastInputTokens || 0) + " · 输出 " + fmtTokens(u.lastOutputTokens || 0));
+      bits.push("本轮 输入 " + fmtTokens(u.lastInputTokens || 0) + " | 输出 " + fmtTokens(u.lastOutputTokens || 0));
     }
     if (u.totalInputTokens != null || u.totalOutputTokens != null) {
-      bits.push("累计 输入 " + fmtTokens(u.totalInputTokens || 0) + " · 输出 " + fmtTokens(u.totalOutputTokens || 0));
+      bits.push("累计 输入 " + fmtTokens(u.totalInputTokens || 0) + " | 输出 " + fmtTokens(u.totalOutputTokens || 0));
     }
     if (!bits.length) return "";
-    return '<div class="s-metrics s-usage">' + escapeHtml(bits.join(" · ")) + "</div>";
+    return '<div class="s-metrics s-usage">' + escapeHtml(bits.join(" | ")) + "</div>";
   }
 
   function usageDetail(u) {
@@ -482,9 +482,8 @@
   function metricsSummary(m) {
     if (!m || !m.totalRounds) return "";
     var pct = Math.round(m.missPercent * 100);
-    var slow = Math.round(m.latencyMaxMs / 1000);
     var alertClass = m.missPercent > 0.6 ? " metrics-alert" : "";
-    return '<div class="s-metrics' + alertClass + '">cache miss ' + pct + '% · 最慢一轮 ' + slow + 's</div>';
+    return '<div class="s-metrics' + alertClass + '">cache miss ' + pct + '%</div>';
   }
 
   function metricsDetail(m) {
@@ -500,7 +499,6 @@
         metricsKV('会话时长', fmtDuration(m.sessionDurationMs)) +
         metricsKV('耗时中位', fmtMs(m.latencyMedianMs)) +
         metricsKV('耗时 p90', fmtMs(m.latencyP90Ms)) +
-        metricsKV('最慢一轮', fmtMs(m.latencyMaxMs)) +
         metricsKV('tool_use 比', Math.round(m.toolUseRatio * 100) + '%') +
         metricsKV('最长 turn', fmtMs(m.maxTurnDurationMs)) +
         metricsKV('工具报错', String(m.toolErrorCount)) +

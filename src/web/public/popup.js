@@ -158,10 +158,10 @@
           if (msg.thinking) {
             win.lastThinking = msg.text;
             // 只改跑马灯文案，避免整页重渲打断滚动
-            var scroll = document.querySelector("#persona .persona-pending-scroll");
-            if (scroll) {
-              var line = thinkingLine(msg.text);
-              scroll.textContent = line + " · " + line;
+            var scrollEl = document.querySelector("#persona .persona-pending-scroll");
+            if (scrollEl && state.mode === "detail" && state.current === msg.windowId) {
+              var thinkLine = thinkingLine(msg.text);
+              scrollEl.textContent = thinkLine + " · " + thinkLine;
               break;
             }
           } else {
@@ -419,7 +419,7 @@
       card.onclick = function () { showDetail(w.windowId); };
       var metricsLine = popupUsage(w.usage);
       var missLine = popupMetrics(w.metrics);
-      var extra = [metricsLine, missLine].filter(Boolean).join(" · ");
+      var extra = [metricsLine, missLine].filter(Boolean).join(" | ");
       card.innerHTML =
         '<div class="win-card-head">' +
           '<span class="win-card-dot" style="color:' + (pending ? 'var(--accent2)' : unread ? 'var(--honey)' : 'var(--border)') + '">●</span>' +
@@ -472,24 +472,26 @@
     el("card").classList.toggle("unread", !!state.unread[state.current]);
     el("card").classList.toggle("persona-pending", pending);
 
-    var text = w.lastPersona || w.lastText || "";
+    var draft = w.lastPersona || "";
+    var text = draft || w.lastText || "";
     var banner = "";
     if (pending) {
-      if (text) {
+      // 跑马灯只看流式草稿 draft；别用 lastText（停顿前的旧正文会挡住思考）
+      if (draft) {
         banner = '<div class="persona-pending-banner">…人设层生成中</div>';
       } else if (w.lastThinking) {
         var line = thinkingLine(w.lastThinking);
-        var scroll = escapeHtml(line) + " · " + escapeHtml(line);
+        var scrollTxt = escapeHtml(line) + " · " + escapeHtml(line);
         banner =
           '<div class="persona-pending-banner persona-pending-marquee">' +
-          '<span class="persona-pending-scroll">' + scroll + "</span></div>";
+          '<span class="persona-pending-scroll">' + scrollTxt + "</span></div>";
       } else {
         banner = '<div class="persona-pending-banner">…人设层调用中，等 API 回来</div>';
       }
     }
     if (pending) {
       el("persona").innerHTML =
-        banner + (text ? replaceEmoji(window.MjMarkdown.render(text)) : "");
+        banner + (draft ? replaceEmoji(window.MjMarkdown.render(draft)) : "");
     } else {
       el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
     }
@@ -503,7 +505,7 @@
     renderQuickActions(text);
 
     // 会话度量（简短行内版）
-    var m = [popupUsage(w.usage), popupMetrics(w.metrics)].filter(Boolean).join(" · ");
+    var m = [popupUsage(w.usage), popupMetrics(w.metrics)].filter(Boolean).join(" | ");
     el("detailMetrics").textContent = m || "";
     el("detailMetrics").style.display = m ? "" : "none";
 
@@ -705,18 +707,17 @@
       bits.push(s);
     }
     if (u.lastInputTokens != null || u.lastOutputTokens != null) {
-      bits.push("本轮 输入 " + popupFmtTokens(u.lastInputTokens || 0) + " · 输出 " + popupFmtTokens(u.lastOutputTokens || 0));
+      bits.push("本轮 输入 " + popupFmtTokens(u.lastInputTokens || 0) + " | 输出 " + popupFmtTokens(u.lastOutputTokens || 0));
     }
     if (u.totalInputTokens != null || u.totalOutputTokens != null) {
-      bits.push("累计 输入 " + popupFmtTokens(u.totalInputTokens || 0) + " · 输出 " + popupFmtTokens(u.totalOutputTokens || 0));
+      bits.push("累计 输入 " + popupFmtTokens(u.totalInputTokens || 0) + " | 输出 " + popupFmtTokens(u.totalOutputTokens || 0));
     }
-    return bits.join(" · ");
+    return bits.join(" | ");
   }
   function popupMetrics(m) {
     if (!m || !m.totalRounds) return "";
     var pct = Math.round(m.missPercent * 100);
-    var slow = Math.round(m.latencyMaxMs / 1000);
-    return "cache miss " + pct + "% · 最慢一轮 " + slow + "s";
+    return "cache miss " + pct + "%";
   }
 
   function escapeAttr(s) { return escapeHtml(s).replace(/[^a-zA-Z0-9_-]/g, "_"); }
