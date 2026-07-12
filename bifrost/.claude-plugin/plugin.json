@@ -2,6 +2,6 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "bifrost",
   "displayName": "Bifrost (虹桥)",
-  "version": "0.1.0",
-  "description": "虹桥：每个窗口的 hook 事件经 report.ps1 上报中枢 /ingest（离线缓存补送），并在本地放提示音/弹窗。"
+  "version": "0.2.0",
+  "description": "虹桥：hook 上报中枢 /ingest + 本地提示。Claude Code 与 Cursor 共用 scripts/report.ps1（见 docs/design/bifrost-cursor-dual-v1.md）。"
 }

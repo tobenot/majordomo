@@ -1,0 +1,6 @@
+{
+  "name": "bifrost",
+  "version": "0.2.0",
+  "description": "虹桥：hook 上报中枢 /ingest + 本地提示音/弹窗。Claude Code 与 Cursor 共用 scripts/report.ps1。",
+  "hooks": "hooks/cursor-hooks.json"
+}

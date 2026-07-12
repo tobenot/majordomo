@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\""
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\""
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\""
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\""
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\"",
+        "matcher": "AskUserQuestion"
+      }
+    ]
+  }
+}
