@@ -1,11 +1,12 @@
-# bifrost-statusline.ps1 - Claude Code statusline badge
+# bifrost-statusline.ps1 - statusline badge for Claude Code / Cursor CLI
 # Reads cache/status.json written by report.ps1, outputs a rainbow-cycling [BIFROST].
 # No output when hub is unreachable or status file missing (first turn not yet done).
 #
 # Color cycle (7 hues, readable on both dark & light terminal themes):
 #   0=orange 1=gold 2=green 3=cyan 4=blue 5=purple 6=rose -> repeat
 
-$root = $env:CLAUDE_PLUGIN_ROOT
+$root = $env:CURSOR_PLUGIN_ROOT
+if ([string]::IsNullOrWhiteSpace($root)) { $root = $env:CLAUDE_PLUGIN_ROOT }
 if ([string]::IsNullOrWhiteSpace($root)) { $root = Split-Path -Parent $PSScriptRoot }
 
 $statusFile = Join-Path (Join-Path $root 'cache') 'status.json'
