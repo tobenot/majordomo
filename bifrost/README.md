@@ -62,8 +62,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-cursor-hoo
 
 **Claude Code** 订阅：`SessionStart` `Stop` `Notification` `TaskCreated` `TaskCompleted` `SessionEnd` `UserPromptSubmit`（及 AskUserQuestion 的 PreToolUse）。
 
-**Cursor** 订阅：`sessionStart` `sessionEnd` `afterAgentResponse` `beforeSubmitPrompt` `preToolUse`(AskUserQuestion)。  
-Cursor 的 `stop` 不带全文，故用 `afterAgentResponse` 对齐 CC 的 `Stop`（全文 + 弹窗）。无 `Notification` / `Task*` 对等事件，v1 不强行伪造。
+**Cursor** 订阅：`sessionStart` `sessionEnd` `afterAgentResponse` `stop` `beforeSubmitPrompt` `preToolUse`(AskUserQuestion)。  
+`afterAgentResponse` 带全文但 CLI 上常哑火；`stop` 更稳但无全文 → 两者都挂，正文优先读 `transcript_path`，3s 去抖防双响。无 `Notification` / `Task*` 对等事件，v1 不强行伪造。
 
 每次触发 `scripts/report.ps1`：
 

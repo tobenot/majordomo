@@ -112,11 +112,13 @@ $eventName = [string]$evt.hook_event_name
 if ([string]::IsNullOrWhiteSpace($eventName)) { exit 0 }
 
 # Cursor event aliases -> CC names so the switch below stays one table.
-# afterAgentResponse is Cursor's text-bearing stand-in for CC Stop (Cursor stop has no text).
+# afterAgentResponse has text but is flaky (esp. CLI); stop is reliable but text-less
+# -> both map to Stop, body from transcript. See forum: afterAgentResponse not in CLI.
 switch ($eventName) {
     'sessionStart'         { $eventName = 'SessionStart' }
     'sessionEnd'           { $eventName = 'SessionEnd' }
     'afterAgentResponse'   { $eventName = 'Stop' }
+    'stop'                 { $eventName = 'Stop' }
     'beforeSubmitPrompt'   { $eventName = 'UserPromptSubmit' }
     'preToolUse'           { $eventName = 'PreToolUse' }
 }
@@ -323,9 +325,27 @@ $envelope = [ordered]@{
     payload  = $payload
 }
 
+$cacheDir = Join-Path $root 'cache'
+
+# Cursor may fire both afterAgentResponse and stop for one turn. Drop the twin.
+# ponytail: 3s file stamp per window; ceiling = rare missed twin if turns <3s apart.
+if ($mappedEvent -eq 'stop' -and -not [string]::IsNullOrWhiteSpace($windowId)) {
+    try {
+        if (-not (Test-Path $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
+        $safeSid = ($windowId -replace '[\\/:*?"<>|]', '_')
+        $debFile = Join-Path $cacheDir "stop-debounce-$safeSid.txt"
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        if (Test-Path -LiteralPath $debFile) {
+            $prev = 0L
+            try { $prev = [int64](Get-Content -LiteralPath $debFile -Raw).Trim() } catch { }
+            if (($now - $prev) -ge 0 -and ($now - $prev) -lt 3000) { exit 0 }
+        }
+        Set-Content -LiteralPath $debFile -Value "$now" -Encoding ASCII -NoNewline
+    } catch { }
+}
+
 # Attach statusline usage snapshot if present (ctx% / window / tokens).
 # See docs/design/bifrost-usage-v1.md.
-$cacheDir = Join-Path $root 'cache'
 try {
     if (-not [string]::IsNullOrWhiteSpace($windowId)) {
         $safeSid = ($windowId -replace '[\\/:*?"<>|]', '_')

@@ -16,6 +16,11 @@
         "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\""
       }
     ],
+    "stop": [
+      {
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\""
+      }
+    ],
     "beforeSubmitPrompt": [
       {
         "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/scripts/report.ps1\""

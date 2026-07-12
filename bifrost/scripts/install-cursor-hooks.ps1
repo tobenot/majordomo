@@ -33,6 +33,7 @@ $bifrostEvents = @(
     'sessionStart',
     'sessionEnd',
     'afterAgentResponse',
+    'stop',
     'beforeSubmitPrompt',
     'preToolUse'
 )
