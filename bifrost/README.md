@@ -15,22 +15,35 @@
 
 ## 装上（开发期）
 
-同一目录，两种宿主：
+**Claude Code**（`--plugin-dir` 可用）：
 
 ```bash
-# Claude Code
 claude --dangerously-skip-permissions --plugin-dir D:/GitRep/majordomo/bifrost
-
-# Cursor Agent CLI（--force ≈ skip-permissions）
-agent --force --plugin-dir D:/GitRep/majordomo/bifrost
 ```
 
-Cursor IDE 常驻（无 `--plugin-dir` 时）：把本目录 junction/symlink 到 `~/.cursor/plugins/local/bifrost`，然后 Reload Window。
+**Cursor**（现行可靠做法）：
 
-```bat
-mklink /J %USERPROFILE%\.cursor\plugins\local\bifrost D:\GitRep\majordomo\bifrost
+> 实测 `agent --plugin-dir …` **目前不会加载插件 hooks**（CLI 插件能力未对齐）。外仓软链进 `~/.cursor/plugins/local` 也会被拒。  
+> 现行装法：用户级 hooks 指到**同一份** `scripts/report.ps1`（零脚本复制）。
+
+把下面写进 `~/.cursor/hooks.json`（路径按本机改），然后**新开**一个 agent 窗口：
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
+    "sessionEnd": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
+    "afterAgentResponse": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
+    "beforeSubmitPrompt": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"" }],
+    "preToolUse": [{ "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"D:/GitRep/majordomo/bifrost/scripts/report.ps1\"", "matcher": "AskUserQuestion" }]
+  }
+}
 ```
 
+本机若已写过这份 hooks，直接新开窗口即可。验收看 `bifrost/cache/status.json` 的 `hue` 是否递增，或中枢是否收到上报——**不要**问模型「你有没有 bifrost」（hooks 对 agent 不可见）。
+
+详情：`docs/design/bifrost-cursor-dual-v1.md` §6。
 ## Statusline 徽章
 
 `[BIFROST]` 彩虹渐变徽章——中枢连通时每回合换色。中枢不在 → 不显示。
@@ -98,4 +111,5 @@ Bifrost 唯一的对外依赖就是一个能 POST 的 `/ingest` URL（设计稿 
 - 脚本读 stdin 前必须设 UTF-8，否则中文全文乱码。
 - `report.ps1` 源码故意全 ASCII 注释，PS 5.1 无论 BOM 与否都能解析。
 - Cursor `afterAgentResponse` 若实测每回合多次触发导致弹窗吵，见设计稿 §8（探针后再节流）。
+- Cursor stdin 偶发带 BOM/前缀字符，`report.ps1` 已跳到第一个 `{` 再解析。
 - `dump.jsonl` / `cache/` / `*.offline.jsonl` / `*.log` 均 gitignore，不入仓。

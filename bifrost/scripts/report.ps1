@@ -17,6 +17,12 @@ $ErrorActionPreference = 'SilentlyContinue'
 # Chinese in last_assistant_message / text. Fix encoding before reading a single byte.
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $raw = [Console]::In.ReadToEnd()
+# Cursor (and some hosts) may prefix a UTF-8 BOM or junk before '{'; strip so ConvertFrom-Json works.
+if (-not [string]::IsNullOrWhiteSpace($raw)) {
+    $brace = $raw.IndexOf('{')
+    if ($brace -gt 0) { $raw = $raw.Substring($brace) }
+    elseif ($brace -lt 0) { $raw = '' }
+}
 
 # Plugin root: Cursor then CC env; fall back to the parent of scripts/.
 $root = $env:CURSOR_PLUGIN_ROOT
