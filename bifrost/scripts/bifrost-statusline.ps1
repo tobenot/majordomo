@@ -131,5 +131,34 @@ if ($null -ne $pct) {
 
 if ($badge) { $parts.Add($badge) }
 
+# --- usage cache for hub (report.ps1 picks up on next hook) ---
+# ponytail: statusline must not POST; file drop keeps hook path one-shot.
+try {
+    $sid = ''
+    if ($payload) { $sid = [string]$payload.session_id }
+    if (-not [string]::IsNullOrWhiteSpace($sid)) {
+        $safe = ($sid -replace '[\\/:*?"<>|]', '_')
+        $usageDir = Join-Path $root 'cache'
+        if (-not (Test-Path $usageDir)) { New-Item -ItemType Directory -Path $usageDir -Force | Out-Null }
+        $usageObj = [ordered]@{ updatedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+        if ($null -ne $pct) { $usageObj.usedPercent = $pct }
+        if ($payload -and $null -ne $payload.context_window -and $null -ne $payload.context_window.context_window_size) {
+            $usageObj.windowSize = [int64]$payload.context_window.context_window_size
+        }
+        if ($payload -and $null -ne $payload.context_window) {
+            $cw = $payload.context_window
+            if ($null -ne $cw.total_input_tokens) { $usageObj.totalInputTokens = [int64]$cw.total_input_tokens }
+            if ($null -ne $cw.total_output_tokens) { $usageObj.totalOutputTokens = [int64]$cw.total_output_tokens }
+            $cu = $cw.current_usage
+            if ($null -ne $cu) {
+                if ($null -ne $cu.input_tokens) { $usageObj.lastInputTokens = [int64]$cu.input_tokens }
+                if ($null -ne $cu.output_tokens) { $usageObj.lastOutputTokens = [int64]$cu.output_tokens }
+                if ($null -ne $cu.cache_read_input_tokens) { $usageObj.lastCacheReadTokens = [int64]$cu.cache_read_input_tokens }
+            }
+        }
+        ($usageObj | ConvertTo-Json -Compress) | Set-Content -Path (Join-Path $usageDir "usage-$safe.json") -Encoding UTF8 -NoNewline
+    }
+} catch { }
+
 [Console]::Write(($parts -join '  '))
 exit 0

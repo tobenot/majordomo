@@ -213,12 +213,37 @@ $envelope = [ordered]@{
     ts       = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     payload  = $payload
 }
+
+# Attach statusline usage snapshot if present (ctx% / window / tokens).
+# See docs/design/bifrost-usage-v1.md.
+$cacheDir = Join-Path $root 'cache'
+try {
+    if (-not [string]::IsNullOrWhiteSpace($windowId)) {
+        $safeSid = ($windowId -replace '[\\/:*?"<>|]', '_')
+        $usageFile = Join-Path $cacheDir "usage-$safeSid.json"
+        if (Test-Path $usageFile) {
+            $u = Get-Content -Path $usageFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($u) {
+                $usage = [ordered]@{ updatedAt = [int64]$u.updatedAt }
+                if ($null -ne $u.usedPercent) { $usage.usedPercent = [int]$u.usedPercent }
+                if ($null -ne $u.windowSize) { $usage.windowSize = [int64]$u.windowSize }
+                if ($null -ne $u.lastInputTokens) { $usage.lastInputTokens = [int64]$u.lastInputTokens }
+                if ($null -ne $u.lastOutputTokens) { $usage.lastOutputTokens = [int64]$u.lastOutputTokens }
+                if ($null -ne $u.lastCacheReadTokens) { $usage.lastCacheReadTokens = [int64]$u.lastCacheReadTokens }
+                if ($null -ne $u.totalInputTokens) { $usage.totalInputTokens = [int64]$u.totalInputTokens }
+                if ($null -ne $u.totalOutputTokens) { $usage.totalOutputTokens = [int64]$u.totalOutputTokens }
+                $payload.usage = $usage
+                $envelope.payload = $payload
+            }
+        }
+    }
+} catch { }
+
 $json = $envelope | ConvertTo-Json -Depth 10 -Compress
 
 # ---------------------------------------------------------------------------
 # Report to hub. Success -> also drain offline backlog. Failure -> cache.
 # ---------------------------------------------------------------------------
-$cacheDir  = Join-Path $root 'cache'
 $offlineFile = Join-Path $cacheDir 'ingest.offline.jsonl'
 
 function Send-Ingest {

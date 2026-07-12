@@ -41,6 +41,20 @@ export interface IngestPayload {
   notificationType?: string; // permission_prompt | idle_prompt | ...
   /** transcript 文件路径（CC hook 的 transcript_path，透传），供中枢增量读 usage。 */
   transcriptPath?: string;
+  /** statusline 落盘的上下文/token 快照（见 bifrost-usage-v1.md）。 */
+  usage?: WindowUsage;
+}
+
+/** 上下文占用 + token 用量（statusline → report → 中枢）。与 SessionMetrics（miss%）分立。 */
+export interface WindowUsage {
+  usedPercent?: number;
+  windowSize?: number;
+  lastInputTokens?: number;
+  lastOutputTokens?: number;
+  lastCacheReadTokens?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  updatedAt: number;
 }
 
 // ── ① WindowRegistry ────────────────────────────────────────
@@ -81,6 +95,8 @@ export interface WindowInfo {
   updatedAt: number;
   /** 会话度量（缓存率 + 画像），v1 只显示原始数值，不做判定。 */
   metrics?: SessionMetrics;
+  /** 上下文 / token（statusline 上报；Cursor 主看这个，CC 与 miss% 并存）。 */
+  usage?: WindowUsage;
 }
 
 // ── ② TodoStore ─────────────────────────────────────────────

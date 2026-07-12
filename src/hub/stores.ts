@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import { hubStorePath, ensureDir, globalDir } from "../core/paths";
 import { createLogger } from "../core/logger";
-import { WindowInfo, WindowState, WindowActivity, TodoItem, AcceptanceItem, IngestEvent } from "./types";
+import { WindowInfo, WindowState, WindowActivity, TodoItem, AcceptanceItem, IngestEvent, WindowUsage } from "./types";
 import { SessionMetrics } from "./sessionMetrics";
 
 const log = createLogger("hub:store");
@@ -140,6 +140,16 @@ export class WindowRegistry extends JsonArrayStore<WindowInfo> {
     const w = this.map.get(windowId);
     if (!w) return undefined;
     w.metrics = metrics;
+    w.updatedAt = Date.now();
+    this.persist();
+    return w;
+  }
+
+  /** statusline 上报的 ctx%/token。整份覆盖。 */
+  updateUsage(windowId: string, usage: WindowUsage): WindowInfo | undefined {
+    const w = this.map.get(windowId);
+    if (!w) return undefined;
+    w.usage = usage;
     w.updatedAt = Date.now();
     this.persist();
     return w;

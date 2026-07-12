@@ -156,6 +156,7 @@
         " · " +
         escapeHtml(oneLine(w.lastUserText || w.lastSummary || w.lastText || "", 60)) +
         "</div>" +
+        (w.usage ? usageSummary(w.usage) : "") +
         (w.metrics ? metricsSummary(w.metrics) : "");
       li.onclick = () => selectWindow(w.windowId);
       ul.appendChild(li);
@@ -254,8 +255,8 @@
       pScroll.innerHTML = '<div class="persona-msgs empty">还没有人设消息</div>';
     }
 
-    // 会话度量
-    el("metricsArea").innerHTML = metricsDetail(w.metrics);
+    // 会话度量 + 上下文/token
+    el("metricsArea").innerHTML = usageDetail(w.usage) + metricsDetail(w.metrics);
 
     // Activity 日志（折叠）
     var acts = (w.activity || []).slice().reverse();
@@ -336,6 +337,60 @@
         if (btn) btn.onclick = () => send({ type: "acceptance_resolve", id: a.id });
         ul.appendChild(li);
       });
+  }
+
+  function fmtTokens(n) {
+    if (n == null || n === "") return "";
+    n = Number(n);
+    if (!isFinite(n)) return "";
+    if (n >= 1000000) {
+      var m = Math.round(n / 100000) / 10;
+      return (m % 1 === 0 ? String(Math.round(m)) : String(m)) + "M";
+    }
+    if (n >= 1000) return Math.round(n / 1000) + "k";
+    return String(Math.round(n));
+  }
+
+  function usageSummary(u) {
+    if (!u) return "";
+    var bits = [];
+    if (u.usedPercent != null) {
+      var line = "ctx " + Math.round(u.usedPercent) + "%";
+      if (u.windowSize) line += " · " + fmtTokens(u.windowSize);
+      bits.push(line);
+    } else if (u.windowSize) {
+      bits.push(fmtTokens(u.windowSize));
+    }
+    if (u.lastInputTokens != null || u.lastOutputTokens != null) {
+      bits.push("本轮 " + fmtTokens(u.lastInputTokens || 0) + "/" + fmtTokens(u.lastOutputTokens || 0));
+    }
+    if (u.totalInputTokens != null || u.totalOutputTokens != null) {
+      bits.push("累计 " + fmtTokens(u.totalInputTokens || 0) + "/" + fmtTokens(u.totalOutputTokens || 0));
+    }
+    if (!bits.length) return "";
+    return '<div class="s-metrics s-usage">' + escapeHtml(bits.join(" · ")) + "</div>";
+  }
+
+  function usageDetail(u) {
+    if (!u) return "";
+    var has =
+      u.usedPercent != null || u.windowSize ||
+      u.lastInputTokens != null || u.lastOutputTokens != null ||
+      u.totalInputTokens != null || u.totalOutputTokens != null;
+    if (!has) return "";
+    return (
+      '<div class="metrics-card">' +
+      '<div class="metrics-title">上下文 / Token</div>' +
+      '<div class="metrics-grid">' +
+        (u.usedPercent != null ? metricsKV("ctx%", Math.round(u.usedPercent) + "%") : "") +
+        (u.windowSize ? metricsKV("窗口上限", fmtTokens(u.windowSize)) : "") +
+        (u.lastInputTokens != null ? metricsKV("本轮 input", fmtTokens(u.lastInputTokens)) : "") +
+        (u.lastOutputTokens != null ? metricsKV("本轮 output", fmtTokens(u.lastOutputTokens)) : "") +
+        (u.lastCacheReadTokens != null ? metricsKV("本轮 cache_read", fmtTokens(u.lastCacheReadTokens)) : "") +
+        (u.totalInputTokens != null ? metricsKV("total input", fmtTokens(u.totalInputTokens)) : "") +
+        (u.totalOutputTokens != null ? metricsKV("total output", fmtTokens(u.totalOutputTokens)) : "") +
+      "</div></div>"
+    );
   }
 
   function metricsSummary(m) {

@@ -72,7 +72,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-cursor-hoo
 ```
 
 > Statusline 只在 **Cursor Agent CLI（终端里的 `agent`）** 生效，协议对齐 Claude Code。IDE 聊天侧栏没有这条 statusline。  
-> 自定义 `statusLine` 会**整行替换**内置行（不是叠加）。`bifrost-statusline.ps1` 会自己画：`模型  ctx N% · 200k  [BIFROST]`（上限来自 `context_window_size`；`param_summary` 若已写进模型名则不再重复）。并尽量把 `session_name`（没有则用目录名）写到终端标题栏。
+> 自定义 `statusLine` 会**整行替换**内置行（不是叠加）。`bifrost-statusline.ps1` 会自己画：`模型  ctx N% · 200k  [BIFROST]`（上限来自 `context_window_size`；`param_summary` 若已写进模型名则不再重复）。并尽量把 `session_name`（没有则用目录名）写到终端标题栏。  
+> 同一脚本还会把 ctx%/窗口上限/本轮·累计 token 写到 `cache/usage-<session>.json`，由 `report.ps1` 带进中枢（见 `docs/design/bifrost-usage-v1.md`）。CC 与 Cursor 都靠这条；miss% 仍只走 CC transcript。
 卸载 bifrost hooks（只删本插件相关条目，其它 hooks 保留）：
 
 ```powershell

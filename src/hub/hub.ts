@@ -4,6 +4,7 @@ import {
   WindowState,
   HubSnapshot,
   WindowInfo,
+  WindowUsage,
 } from "./types";
 import { PersonaEngine } from "../persona/types";
 import { NotifierBus } from "../notify/factory";
@@ -62,7 +63,8 @@ export class HubService {
           windowId: env.windowId, cwd, event: env.event,
           state: "idle", summary: `窗口上线 (${p.source ?? "startup"})`,
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         break;
       }
 
@@ -71,7 +73,8 @@ export class HubService {
           windowId: env.windowId, cwd, event: env.event,
           state: "offline", summary: `窗口下线 (${p.reason ?? ""})`.trim(),
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         this.broadcast({ type: "window_offline", windowId: env.windowId });
         break;
       }
@@ -82,7 +85,8 @@ export class HubService {
           windowId: env.windowId, cwd, event: env.event,
           state: "idle", summary: summarize(text) || "完成一个回合", lastText: text,
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         // 增量读 transcript 获取会话度量（v1：只显示数值，不做判定）
         if (p.transcriptPath) {
           void this.updateMetrics(env.windowId, p.transcriptPath);
@@ -102,7 +106,8 @@ export class HubService {
           windowId: env.windowId, cwd, event: env.event,
           state: "waiting", summary: msg || (isIdle ? "空闲等待输入" : "等待你介入"),
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         if (isIdle) break;
         // 窗口等你 = 需你介入 → 记一条待验收（按窗口去重，反复通知不堆叠）。
         const isPermission = nType.includes("permission");
@@ -125,7 +130,8 @@ export class HubService {
           windowId: env.windowId, cwd, event: env.event,
           state: "working", summary: `新任务：${p.taskSubject ?? p.taskDesc ?? p.taskId ?? "?"}`,
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         // 确定性喂养 todolist，不烧 LLM。
         this.todos.add({
           text: p.taskSubject || p.taskDesc || `任务 ${p.taskId ?? ""}`.trim(),
@@ -142,7 +148,8 @@ export class HubService {
           windowId: env.windowId, cwd, event: env.event,
           state: "working", summary: `完成任务：${p.taskSubject ?? p.taskDesc ?? p.taskId ?? "?"}`,
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         if (p.taskId) this.todos.completeByTaskId(p.taskId);
         this.broadcast({ type: "todos", todos: this.todos.list() });
         break;
@@ -154,7 +161,8 @@ export class HubService {
           windowId: env.windowId, cwd, event: env.event,
           state: "working", summary: userText || "用户输入", lastUserText: userText,
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         break;
       }
 
@@ -165,10 +173,17 @@ export class HubService {
           state: this.windows.get(env.windowId)?.state ?? "idle",
           summary: `未知事件 ${env.event}`,
         });
-        this.pushWindow(w);
+        this.applyUsage(env.windowId, p.usage);
+        this.pushWindow(this.windows.get(env.windowId) ?? w);
         log.debug(`收到未知事件 ${env.event}`);
       }
     }
+  }
+
+  /** payload.usage 有则覆盖挂到窗口（statusline 落盘 → report 透传）。 */
+  private applyUsage(windowId: string, usage?: WindowUsage): void {
+    if (!usage || typeof usage !== "object") return;
+    this.windows.updateUsage(windowId, usage);
   }
 
   private pushWindow(w: WindowInfo): void {

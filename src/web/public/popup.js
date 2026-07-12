@@ -367,7 +367,9 @@
       var card = document.createElement("div");
       card.className = "win-card" + (unread ? " unread" : "");
       card.onclick = function () { showDetail(w.windowId); };
-      var metricsLine = popupMetrics(w.metrics);
+      var metricsLine = popupUsage(w.usage);
+      var missLine = popupMetrics(w.metrics);
+      var extra = [metricsLine, missLine].filter(Boolean).join(" · ");
       card.innerHTML =
         '<div class="win-card-head">' +
           '<span class="win-card-dot" style="color:' + (unread ? 'var(--honey)' : 'var(--border)') + '">●</span>' +
@@ -375,7 +377,7 @@
           '<span class="win-card-time">' + fmtTime(w.updatedAt) + "</span>" +
         "</div>" +
         '<div class="win-card-state">' + (STATE_LABEL[w.state] || w.state) + "</div>" +
-        (metricsLine ? '<div class="win-card-metrics">' + escapeHtml(metricsLine) + "</div>" : "") +
+        (extra ? '<div class="win-card-metrics">' + escapeHtml(extra) + "</div>" : "") +
         (preview ? '<div class="win-card-preview">' + escapeHtml(preview) + "</div>" : "");
       list.appendChild(card);
     });
@@ -429,7 +431,7 @@
     renderQuickActions(text);
 
     // 会话度量（简短行内版）
-    var m = popupMetrics(w.metrics);
+    var m = [popupUsage(w.usage), popupMetrics(w.metrics)].filter(Boolean).join(" · ");
     el("detailMetrics").textContent = m || "";
     el("detailMetrics").style.display = m ? "" : "none";
 
@@ -599,6 +601,33 @@
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
+  }
+  function popupFmtTokens(n) {
+    if (n == null) return "";
+    n = Number(n);
+    if (!isFinite(n)) return "";
+    if (n >= 1000000) {
+      var m = Math.round(n / 100000) / 10;
+      return (m % 1 === 0 ? String(Math.round(m)) : String(m)) + "M";
+    }
+    if (n >= 1000) return Math.round(n / 1000) + "k";
+    return String(Math.round(n));
+  }
+  function popupUsage(u) {
+    if (!u) return "";
+    var bits = [];
+    if (u.usedPercent != null) {
+      var s = "ctx " + Math.round(u.usedPercent) + "%";
+      if (u.windowSize) s += " · " + popupFmtTokens(u.windowSize);
+      bits.push(s);
+    }
+    if (u.lastInputTokens != null || u.lastOutputTokens != null) {
+      bits.push("本轮 " + popupFmtTokens(u.lastInputTokens || 0) + "/" + popupFmtTokens(u.lastOutputTokens || 0));
+    }
+    if (u.totalInputTokens != null || u.totalOutputTokens != null) {
+      bits.push("Σ " + popupFmtTokens(u.totalInputTokens || 0) + "/" + popupFmtTokens(u.totalOutputTokens || 0));
+    }
+    return bits.join(" · ");
   }
   function popupMetrics(m) {
     if (!m || !m.totalRounds) return "";
