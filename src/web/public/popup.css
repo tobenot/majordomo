@@ -107,26 +107,24 @@ header button, header .conn { -webkit-app-region: no-drag; }
 .win-card.persona-pending .win-card-state { color: var(--accent2); }
 .persona-pending-banner {
   margin: 0 0 10px;
-  padding: 8px 10px;
-  border: 1px dashed var(--accent2);
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
   border-radius: 8px;
-  color: var(--accent2);
+  color: var(--text2);
   font-size: 12px;
 }
-.persona-thinking {
-  margin: 0 0 10px;
-  padding: 8px 10px;
-  max-height: 6.5em;
-  overflow-y: auto;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
-  color: var(--text2);
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-word;
-  opacity: 0.85;
+.persona-pending-banner.persona-pending-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.persona-pending-scroll {
+  display: inline-block;
+  padding-right: 3em;
+  animation: persona-think-marquee 16s linear infinite;
+}
+@keyframes persona-think-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 .card.persona-pending .who { color: var(--accent2); }
 .btn-min {

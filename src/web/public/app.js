@@ -146,6 +146,16 @@
     if (!w) return;
     if (thinking) {
       w.lastThinking = text;
+      // 只改跑马灯文案，避免整页重渲打断滚动动画
+      if (state.current === id) {
+        var scroll = document.querySelector("#personaScroll .persona-pending-scroll");
+        if (scroll) {
+          var line = thinkingLine(text);
+          scroll.textContent = line + " · " + line;
+          renderWindows();
+          return;
+        }
+      }
     } else {
       w.lastPersona = text;
       w.lastThinking = ""; // 正文开始后收起思考
@@ -267,17 +277,20 @@
 
     // 人设消息历史（气泡流，最早在上，最新在下）
     var msgs = w.personaMessages || [];
-    var thinkingHtml = "";
-    if (pending && w.lastThinking && !w.lastPersona) {
-      var thinkTail = w.lastThinking.length > 2400 ? "…" + w.lastThinking.slice(-2400) : w.lastThinking;
-      thinkingHtml =
-        '<div class="persona-thinking" id="personaThinking">' + escapeHtml(thinkTail) + "</div>";
+    var pendingBanner = "";
+    if (pending) {
+      if (w.lastPersona) {
+        pendingBanner = '<div class="persona-pending-banner">…人设层生成中</div>';
+      } else if (w.lastThinking) {
+        var line = thinkingLine(w.lastThinking);
+        var scroll = escapeHtml(line) + " · " + escapeHtml(line);
+        pendingBanner =
+          '<div class="persona-pending-banner persona-pending-marquee">' +
+          '<span class="persona-pending-scroll">' + scroll + "</span></div>";
+      } else {
+        pendingBanner = '<div class="persona-pending-banner">…人设层调用中，等 API 回来</div>';
+      }
     }
-    var pendingBanner = pending
-      ? '<div class="persona-pending-banner">' +
-        (w.lastPersona ? "…人设层生成中" : w.lastThinking ? "…思考中" : "…人设层调用中，等 API 回来") +
-        "</div>"
-      : "";
     // 流式草稿：尚未写入 personaMessages，挂在 lastPersona
     var draftHtml = "";
     if (pending && w.lastPersona) {
@@ -290,8 +303,8 @@
         '<div class="persona-bubble-body md">' + replaceEmoji(window.MjMarkdown.render(w.lastPersona)) + '</div>' +
         '</div>';
     }
-    if (msgs.length || draftHtml || thinkingHtml) {
-      var html = '<div class="persona-msgs">' + pendingBanner + thinkingHtml;
+    if (msgs.length || draftHtml || pendingBanner) {
+      var html = '<div class="persona-msgs">' + pendingBanner;
       for (var i = 0; i < msgs.length; i++) {
         var bubbleHtml =
           '<div class="persona-bubble">' +
@@ -319,8 +332,6 @@
       html += '</div>';
       pScroll.innerHTML = html;
       if (!opts || !opts.keepScroll) pScroll.scrollTop = 0;
-      var thinkEl = el("personaThinking");
-      if (thinkEl) thinkEl.scrollTop = thinkEl.scrollHeight;
       var name = state.assetName || "";
       loadImg(el("standingPanel"), assetUrl("standing", name));
     } else {
@@ -525,6 +536,15 @@
   function oneLine(s, n) {
     s = String(s || "").replace(/\s+/g, " ").trim();
     return s.length > n ? s.slice(0, n) + "…" : s;
+  }
+  /** 取思考流最后一行（非空），给横幅跑马灯用。 */
+  function thinkingLine(s) {
+    var parts = String(s || "").replace(/\r/g, "").split("\n");
+    for (var i = parts.length - 1; i >= 0; i--) {
+      var t = parts[i].replace(/\s+/g, " ").trim();
+      if (t) return t.length > 160 ? t.slice(-160) : t;
+    }
+    return "";
   }
   function fmtTime(ts) {
     try { return new Date(ts).toLocaleTimeString(); } catch { return ""; }

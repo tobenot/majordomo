@@ -157,6 +157,13 @@
         if (msg.partial) {
           if (msg.thinking) {
             win.lastThinking = msg.text;
+            // 只改跑马灯文案，避免整页重渲打断滚动
+            var scroll = document.querySelector("#persona .persona-pending-scroll");
+            if (scroll) {
+              var line = thinkingLine(msg.text);
+              scroll.textContent = line + " · " + line;
+              break;
+            }
           } else {
             win.lastPersona = msg.text;
             win.lastThinking = "";
@@ -466,18 +473,23 @@
     el("card").classList.toggle("persona-pending", pending);
 
     var text = w.lastPersona || w.lastText || "";
-    var thinkingBlock = "";
-    if (pending && w.lastThinking && !w.lastPersona) {
-      var thinkTail = w.lastThinking.length > 2400 ? "…" + w.lastThinking.slice(-2400) : w.lastThinking;
-      thinkingBlock = '<div class="persona-thinking" id="personaThinking">' + escapeHtml(thinkTail) + "</div>";
+    var banner = "";
+    if (pending) {
+      if (text) {
+        banner = '<div class="persona-pending-banner">…人设层生成中</div>';
+      } else if (w.lastThinking) {
+        var line = thinkingLine(w.lastThinking);
+        var scroll = escapeHtml(line) + " · " + escapeHtml(line);
+        banner =
+          '<div class="persona-pending-banner persona-pending-marquee">' +
+          '<span class="persona-pending-scroll">' + scroll + "</span></div>";
+      } else {
+        banner = '<div class="persona-pending-banner">…人设层调用中，等 API 回来</div>';
+      }
     }
     if (pending) {
       el("persona").innerHTML =
-        '<div class="persona-pending-banner">' +
-        (text ? "…人设层生成中" : w.lastThinking ? "…思考中" : "…人设层调用中，等 API 回来") +
-        "</div>" +
-        thinkingBlock +
-        (text ? replaceEmoji(window.MjMarkdown.render(text)) : "");
+        banner + (text ? replaceEmoji(window.MjMarkdown.render(text)) : "");
     } else {
       el("persona").innerHTML = text ? replaceEmoji(window.MjMarkdown.render(text)) : '<span class="empty">（暂无交接文本）</span>';
     }
@@ -486,8 +498,6 @@
     if (!opts || !opts.keepScroll) {
       el("personaWrap").scrollTop = 0;
     }
-    var thinkEl = el("personaThinking");
-    if (thinkEl) thinkEl.scrollTop = thinkEl.scrollHeight;
 
     // 立绘下方快捷面板
     renderQuickActions(text);
@@ -662,6 +672,14 @@
 
   // ── 工具 ────────────────────────────────────────────────
   function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } }
+  function thinkingLine(s) {
+    var parts = String(s || "").replace(/\r/g, "").split("\n");
+    for (var i = parts.length - 1; i >= 0; i--) {
+      var t = parts[i].replace(/\s+/g, " ").trim();
+      if (t) return t.length > 160 ? t.slice(-160) : t;
+    }
+    return "";
+  }
   function escapeHtml(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
