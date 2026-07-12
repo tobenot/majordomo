@@ -186,7 +186,25 @@
       }
       case "window_persona_status":
         state.personaPending[msg.windowId] = msg.phase === "start";
-        if (!state.suppressed) render();
+        if (state.suppressed) {
+          // 缩小态不抢展开，只脉冲提示还在等人设
+          if (msg.phase === "start") pulse();
+          break;
+        }
+        if (msg.phase !== "start") {
+          render();
+          break;
+        }
+        // collapsed/list：展开详情露出「调用中」横幅（原先 collapsed 啥也不显）
+        if (state.mode === "collapsed" || state.mode === "list") {
+          showDetail(msg.windowId);
+          pulse();
+        } else if (state.current !== msg.windowId) {
+          pulse();
+          render();
+        } else {
+          render();
+        }
         break;
     }
   }

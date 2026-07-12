@@ -141,14 +141,24 @@ export class ApiPersona implements PersonaEngine {
   }
 
   async report(input: PersonaInput): Promise<string> {
+    const timeoutMs = 300_000; // 5min：推理模型（hy3 等）常超 30s
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const started = Date.now();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return this.apiFormat === "anthropic"
         ? await this.reportAnthropic(input, controller.signal)
         : await this.reportOpenAi(input, controller.signal);
     } catch (e) {
-      log.warn(`人设层 API 调用失败，本轮降级为原始转述: ${(e as Error).message}`);
+      const err = e as Error;
+      const elapsed = Date.now() - started;
+      const aborted = err.name === "AbortError" || /aborted/i.test(err.message || "");
+      const reason = aborted
+        ? `超时 ${elapsed}ms（上限 ${timeoutMs}ms）`
+        : `${err.name || "Error"}: ${err.message}`;
+      log.warn(
+        `人设层 API 调用失败，本轮降级为原始转述 [${this.apiFormat}/${this.model} @ ${this.baseUrl()}] ${reason}`,
+      );
       const brief = input.workerText.replace(/\s+/g, " ").trim().slice(0, 200);
       return `（人设层 API 暂不可用）工作层结果：${brief}`;
     } finally {
