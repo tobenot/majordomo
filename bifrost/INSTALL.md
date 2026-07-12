@@ -71,7 +71,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-cursor-hoo
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-cursor-hooks.ps1 -StatusLine
 ```
 
-> Statusline 只在 **Cursor Agent CLI（终端里的 `agent`）** 生效，协议对齐 Claude Code。IDE 聊天侧栏没有这条 statusline。
+> Statusline 只在 **Cursor Agent CLI（终端里的 `agent`）** 生效，协议对齐 Claude Code。IDE 聊天侧栏没有这条 statusline。  
+> 自定义 `statusLine` 会**整行替换**内置行（不是叠加）。`bifrost-statusline.ps1` 会自己画：`模型  ctx N%  [BIFROST]`。
 卸载 bifrost hooks（只删本插件相关条目，其它 hooks 保留）：
 
 ```powershell
