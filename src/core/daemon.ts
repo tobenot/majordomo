@@ -291,6 +291,10 @@ export class CoreDaemon {
         this.hub.clearAllAcceptance();
         break;
 
+      case "persona_chat":
+        void this.hub.chat(msg.windowId, msg.text);
+        break;
+
       case "popup_suppress":
         try { fs.writeFileSync(popupSuppressPath(), "", "utf-8"); } catch { /* best-effort */ }
         log.info("弹窗已抑制（popup.suppress 写入）");

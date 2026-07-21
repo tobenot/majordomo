@@ -14,6 +14,12 @@ export interface PersonaInput {
   sessionName: string;
 }
 
+/** 一条聊天历史（跟工作层复命历史分开，语义不同，不共用）。 */
+export interface ChatTurn {
+  role: "user" | "persona";
+  text: string;
+}
+
 export interface PersonaEngine {
   readonly mode: string;
   /**
@@ -22,6 +28,15 @@ export interface PersonaEngine {
    */
   report(
     input: PersonaInput,
+    onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  ): Promise<string>;
+
+  /**
+   * 直接聊天（跟工作流平行，不涉及 workerText）。history 是最近几条聊天往回，不含本轮。
+   */
+  chat(
+    text: string,
+    history: ChatTurn[],
     onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
   ): Promise<string>;
 }

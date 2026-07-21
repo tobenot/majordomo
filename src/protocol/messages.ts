@@ -70,7 +70,9 @@ export type ClientMessage =
   | { type: "acceptance_resolve"; id: string }
   | { type: "acceptance_clear_all" }
   | { type: "popup_suppress" }
-  | { type: "popup_restore" };
+  | { type: "popup_restore" }
+  // ── 直接和人设聊天（跟工作流平行，不进三张表）──
+  | { type: "persona_chat"; windowId: string; text: string };
 
 // ─────────────────────────────────────────────────────────────
 // Core → Client
@@ -111,7 +113,9 @@ export type ServerMessage =
   /** 全局待办变更（全量重推，v1 量小无妨） */
   | { type: "todos"; todos: TodoItem[] }
   /** 待验收清单变更（全量重推） */
-  | { type: "acceptance"; items: AcceptanceItem[] };
+  | { type: "acceptance"; items: AcceptanceItem[] }
+  /** 人设聊天回复（跟 window_persona 平行，不带跑马灯/未读/三张表语义） */
+  | { type: "persona_chat_reply"; windowId: string; text: string; partial?: boolean };
 
 export function parseClientMessage(raw: string): ClientMessage | null {
   try {

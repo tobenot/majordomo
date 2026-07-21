@@ -38,8 +38,12 @@
     assetNames: [],
     unread: {},         // windowId -> true
     personaPending: {}, // windowId -> true
-    mode: "collapsed",  // 'list' | 'detail' | 'collapsed'
+    mode: "collapsed",  // 'list' | 'detail' | 'chat' | 'collapsed'
+    modeBeforeChat: "list", // 聊天视图退出后回到哪
     suppressed: false,  // 用户点了缩小：只留头部条，不响应新事件展开
+    chatLogs: {},        // windowId -> [{ role: 'user'|'persona', text, pending? }] — 跟后端按窗口分开的历史对齐，只是本次浮窗打开期间的展示，不做持久化
+    chatWindowId: "_global", // 当前聊天挂在哪个窗口：详情视图打开的项目窗口，否则虚拟全局
+    chatPending: false,  // 上一句还没收到完整回复前不让连发，避免后端历史被并发请求打乱
   };
 
   var STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
@@ -229,6 +233,20 @@
           render();
         }
         break;
+      case "persona_chat_reply": {
+        var log = state.chatLogs[msg.windowId];
+        if (!log) break; // 没发过消息给这个窗口，忽略（不会发生，防御一下）
+        var last = log[log.length - 1];
+        if (last && last.role === "persona" && last.pending) {
+          last.text = msg.text;
+          last.pending = !!msg.partial;
+        } else {
+          log.push({ role: "persona", text: msg.text, pending: !!msg.partial });
+        }
+        if (!msg.partial) state.chatPending = false;
+        if (state.mode === "chat" && state.chatWindowId === msg.windowId) renderChat();
+        break;
+      }
     }
   }
 
@@ -300,6 +318,23 @@
     render();
   }
 
+  function showChat() {
+    if (state.mode !== "chat") state.modeBeforeChat = state.mode === "collapsed" ? "list" : state.mode;
+    // 详情视图里点聊天 → 挂到该项目窗口；否则挂虚拟全局窗口
+    state.chatWindowId = (state.modeBeforeChat === "detail" && state.current) ? state.current : "_global";
+    if (!state.chatLogs[state.chatWindowId]) state.chatLogs[state.chatWindowId] = [];
+    state.mode = "chat";
+    toggleNavArrows(false);
+    expand();
+    render();
+    setTimeout(function () { var i = el("chatInput"); if (i) i.focus(); }, 0);
+  }
+
+  function hideChat() {
+    state.mode = state.modeBeforeChat || "list";
+    render();
+  }
+
   // ── 立绘 / CG ──────────────────────────────────────────
   // ponytail: 小头像和 peek 用 emoji 替代，不再加载立绘裁切
   function loadPersistentArt() {}
@@ -355,6 +390,7 @@
   function render(opts) {
     if (state.mode === "detail") renderDetail(opts);
     else if (state.mode === "list") renderList();
+    else if (state.mode === "chat") renderChat(opts);
     else renderCollapsed();
   }
 
@@ -380,6 +416,7 @@
     el("time").textContent = "";
     el("listWrap").style.display = "none";
     el("detailWrap").style.display = "none";
+    el("chatWrap").style.display = "none";
     el("card").classList.add("collapsed");
   }
 
@@ -387,6 +424,7 @@
     el("card").classList.remove("collapsed");
     el("listWrap").style.display = "";
     el("detailWrap").style.display = "none";
+    el("chatWrap").style.display = "none";
 
     // 头部：显示项目名和未读计数
     var all = windowList();
@@ -457,6 +495,7 @@
     el("card").classList.remove("collapsed");
     el("listWrap").style.display = "none";
     el("detailWrap").style.display = "";
+    el("chatWrap").style.display = "none";
 
     var w = state.windows[state.current];
     if (!w) { showList(); return; }
@@ -546,6 +585,26 @@
     }
   }
 
+  // 聊天视图：跟 detail 平行，独立渲染，不碰 window_persona 的任何状态
+  function renderChat() {
+    el("card").classList.remove("collapsed");
+    el("listWrap").style.display = "none";
+    el("detailWrap").style.display = "none";
+    el("chatWrap").style.display = "";
+    var w = state.windows[state.chatWindowId];
+    el("proj").textContent = w ? ("跟" + state.personaName + "聊 · " + (w.title || "")) : ("跟" + state.personaName + "聊聊");
+    el("time").textContent = "";
+
+    var messages = state.chatLogs[state.chatWindowId] || [];
+    var logEl = el("chatLog");
+    logEl.innerHTML = messages.map(function (m) {
+      var cls = m.role === "user" ? "chat-msg chat-user" : "chat-msg chat-persona";
+      var text = m.text ? replaceEmoji(window.MjMarkdown.render(m.text)) : "";
+      return '<div class="' + cls + '">' + text + (m.pending ? '<span class="chat-typing">…</span>' : "") + "</div>";
+    }).join("");
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
   function renderMore() {
     var chip = el("more");
     if (!chip) return;
@@ -607,6 +666,27 @@
   // "返回列表"按钮
   el("btnList").onclick = showList;
 
+  // 聊天入口/退出
+  el("btnChat").onclick = function () {
+    if (state.mode === "chat") hideChat();
+    else showChat();
+  };
+  el("chatForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (state.chatPending) return; // 上一句还没回来，等它——避免后端历史被并发请求打乱
+    var input = el("chatInput");
+    var text = (input.value || "").trim();
+    if (!text) return;
+    input.value = "";
+    var windowId = state.chatWindowId;
+    var log = state.chatLogs[windowId] || (state.chatLogs[windowId] = []);
+    log.push({ role: "user", text: text });
+    log.push({ role: "persona", text: "", pending: true });
+    state.chatPending = true;
+    renderChat();
+    send({ type: "persona_chat", windowId: windowId, text: text });
+  });
+
   // 活动折叠
   el("actsToggle").onclick = function () {
     el("actsWrap").classList.toggle("collapsed");
@@ -644,8 +724,12 @@
     return w.lastPersona || w.lastText || "";
   }
 
-  // 左右方向键导航窗口
+  // 左右方向键导航窗口；聊天模式下 Esc 退出
   document.addEventListener("keydown", function (e) {
+    if (state.mode === "chat") {
+      if (e.key === "Escape") { e.preventDefault(); hideChat(); }
+      return;
+    }
     if (state.mode !== "detail") return;
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); navWindow(-1); }

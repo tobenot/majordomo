@@ -6,7 +6,7 @@ import {
   WindowInfo,
   WindowUsage,
 } from "./types";
-import { PersonaEngine } from "../persona/types";
+import { PersonaEngine, ChatTurn } from "../persona/types";
 import { NotifierBus } from "../notify/factory";
 import { ServerMessage } from "../protocol/messages";
 import { createLogger } from "../core/logger";
@@ -31,6 +31,10 @@ export class HubService {
 
   /** 每窗口在 transcript 文件里的读取位置（增量读用的游标）。 */
   private metricsCursors = new Map<string, MetricsCursor>();
+
+  /** 直接聊天历史，跟工作层复命历史（personaMessages）分开——语义不同，不共用，重启清空。 */
+  private chatHistory = new Map<string, ChatTurn[]>();
+  private static readonly CHAT_HISTORY_LIMIT = 10;
 
   constructor(
     private persona: PersonaEngine,
@@ -278,6 +282,28 @@ export class HubService {
       log.warn(`persona 复命失败（窗口 ${w.title}）: ${(e as Error).message}`);
     } finally {
       this.broadcast({ type: "window_persona_status", windowId: w.windowId, phase: "done" });
+    }
+  }
+
+  // ── 直接聊天（跟工作流平行，不进三张表，不过 personaThrottleMs）──────
+  async chat(windowId: string, text: string): Promise<void> {
+    const history = this.chatHistory.get(windowId) ?? [];
+    try {
+      let lastPartialAt = 0;
+      const reply = await this.persona.chat(text, history, (accumulated) => {
+        const now = Date.now();
+        if (now - lastPartialAt < 80) return;
+        lastPartialAt = now;
+        this.broadcast({ type: "persona_chat_reply", windowId, text: accumulated, partial: true });
+      });
+      history.push({ role: "user", text }, { role: "persona", text: reply });
+      // ponytail: 简单环形缓冲，超出丢最旧的——够用就行，不做持久化/检索
+      while (history.length > HubService.CHAT_HISTORY_LIMIT) history.shift();
+      this.chatHistory.set(windowId, history);
+      this.broadcast({ type: "persona_chat_reply", windowId, text: reply });
+    } catch (e) {
+      log.warn(`人设聊天失败（窗口 ${windowId}）: ${(e as Error).message}`);
+      this.broadcast({ type: "persona_chat_reply", windowId, text: "（出错了，再说一句试试？）" });
     }
   }
 

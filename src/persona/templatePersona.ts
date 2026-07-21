@@ -1,4 +1,4 @@
-import { PersonaEngine, PersonaInput } from "./types";
+import { PersonaEngine, PersonaInput, ChatTurn } from "./types";
 
 /**
  * 离线模板人设层：无需任何密钥，从工作层输出里抽取要点，套上指挥官口吻。
@@ -24,6 +24,15 @@ export class TemplatePersona implements PersonaEngine {
 
     // ponytail: 模板兜底——开头直入工作内容，称呼放后面。
     return brief ? `${brief} 喵~ ${kaomoji}` : `这一轮工作层没有产出可汇报的内容呢，主人～ ${kaomoji}`;
+  }
+
+  async chat(
+    text: string,
+    _history: ChatTurn[],
+    _onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  ): Promise<string> {
+    const kaomoji = pick(["(≧▽≦)", "ฅ^•ﻌ•^ฅ", "(´・ω・`)", "(｡♥‿♥｡)"]);
+    return `没接 API 呢，先干聊两句～ 你说的是「${text.slice(0, 60)}」对吧？ ${kaomoji}`;
   }
 }
 

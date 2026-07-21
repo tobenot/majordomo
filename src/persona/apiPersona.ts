@@ -1,4 +1,4 @@
-import { PersonaEngine, PersonaInput } from "./types";
+import { PersonaEngine, PersonaInput, ChatTurn } from "./types";
 import { createLogger } from "../core/logger";
 
 const log = createLogger("persona:api");
@@ -149,8 +149,9 @@ export class ApiPersona implements PersonaEngine {
     return base.endsWith("/v1") ? `${base}/messages` : `${base}/v1/messages`;
   }
 
-  private async reportOpenAi(
-    input: PersonaInput,
+  private async callOpenAi(
+    system: string,
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
     signal: AbortSignal,
     onDelta?: (accumulated: string, phase: "reasoning" | "content") => void,
   ): Promise<string> {
@@ -162,10 +163,7 @@ export class ApiPersona implements PersonaEngine {
       },
       body: JSON.stringify({
         model: this.model,
-        messages: [
-          { role: "system", content: this.systemPrompt() },
-          { role: "user", content: this.userPrompt(input) },
-        ],
+        messages: [{ role: "system", content: system }, ...messages],
         temperature: 0.7,
         // ponytail: 推理模型（如 hy3）会先烧 reasoning tokens；800 常把 content 挤成 null
         max_tokens: 4096,
@@ -176,8 +174,9 @@ export class ApiPersona implements PersonaEngine {
     return readSseStream(resp, signal, pieceFromOpenAiChunk, onDelta);
   }
 
-  private async reportAnthropic(
-    input: PersonaInput,
+  private async callAnthropic(
+    system: string,
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
     signal: AbortSignal,
     onDelta?: (accumulated: string, phase: "reasoning" | "content") => void,
   ): Promise<string> {
@@ -190,10 +189,8 @@ export class ApiPersona implements PersonaEngine {
       },
       body: JSON.stringify({
         model: this.model,
-        system: [
-          { type: "text", text: this.systemPrompt(), cache_control: { type: "ephemeral" } },
-        ],
-        messages: [{ role: "user", content: this.userPrompt(input) }],
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages,
         temperature: 0.7,
         max_tokens: 4096,
         stream: true,
@@ -203,9 +200,11 @@ export class ApiPersona implements PersonaEngine {
     return readSseStream(resp, signal, pieceFromAnthropicChunk, onDelta);
   }
 
-  async report(
-    input: PersonaInput,
-    onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  private async call(
+    system: string,
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    onDelta: ((accumulated: string, phase?: "reasoning" | "content") => void) | undefined,
+    fallback: string,
   ): Promise<string> {
     const timeoutMs = 300_000; // 5min：推理模型（hy3 等）常超 30s
     const controller = new AbortController();
@@ -213,8 +212,8 @@ export class ApiPersona implements PersonaEngine {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return this.apiFormat === "anthropic"
-        ? await this.reportAnthropic(input, controller.signal, onDelta)
-        : await this.reportOpenAi(input, controller.signal, onDelta);
+        ? await this.callAnthropic(system, messages, controller.signal, onDelta)
+        : await this.callOpenAi(system, messages, controller.signal, onDelta);
     } catch (e) {
       const err = e as Error;
       const elapsed = Date.now() - started;
@@ -223,13 +222,54 @@ export class ApiPersona implements PersonaEngine {
         ? `超时 ${elapsed}ms（上限 ${timeoutMs}ms）`
         : `${err.name || "Error"}: ${err.message}`;
       log.warn(
-        `人设层 API 调用失败，本轮降级为原始转述 [${this.apiFormat}/${this.model} @ ${this.baseUrl()}] ${reason}`,
+        `人设层 API 调用失败，降级为兜底文案 [${this.apiFormat}/${this.model} @ ${this.baseUrl()}] ${reason}`,
       );
-      const brief = input.workerText.replace(/\s+/g, " ").trim().slice(0, 200);
-      return `（人设层 API 暂不可用）工作层结果：${brief}`;
+      return fallback;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async report(
+    input: PersonaInput,
+    onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  ): Promise<string> {
+    const brief = input.workerText.replace(/\s+/g, " ").trim().slice(0, 200);
+    return this.call(
+      this.systemPrompt(),
+      [{ role: "user", content: this.userPrompt(input) }],
+      onDelta,
+      `（人设层 API 暂不可用）工作层结果：${brief}`,
+    );
+  }
+
+  private chatSystemPrompt(): string {
+    const styleHint =
+      this.style === "cat-girl-maid"
+        ? ""
+        : "你用自然、亲切的口吻聊天。";
+    const parts = [
+      `你是「${this.personaName}」，正在和主人闲聊或聊这个项目本身。`,
+      styleHint,
+      "这不是工作汇报，不需要总结工作层输出，也不用给「推荐回复」——就是正常聊天，随意一点。",
+    ];
+    if (this.projectInstructions) {
+      parts.push(`\n## 项目专属指令\n${this.projectInstructions}`);
+    }
+    return parts.join("\n");
+  }
+
+  async chat(
+    text: string,
+    history: ChatTurn[],
+    onDelta?: (accumulated: string, phase?: "reasoning" | "content") => void,
+  ): Promise<string> {
+    const messages: Array<{ role: "user" | "assistant"; content: string }> = history.map((h) => ({
+      role: h.role === "persona" ? "assistant" : "user",
+      content: h.text,
+    }));
+    messages.push({ role: "user", content: text });
+    return this.call(this.chatSystemPrompt(), messages, onDelta, "（人设层 API 暂不可用，聊天先歇一下～）");
   }
 }
 

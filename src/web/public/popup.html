@@ -24,6 +24,7 @@
         <span class="proj" id="proj">majordomo</span>
         <span class="nav-arrow" id="navRight" title="下一个窗口 (→)">▶</span>
         <span class="more" id="more" style="display:none"></span>
+        <span class="chat-toggle" id="btnChat" title="直接和人设聊聊">💬</span>
         <span class="spacer"></span>
         <span class="time" id="time"></span>
         <span class="conn" id="conn" title="与中枢的连接"></span>
@@ -71,6 +72,15 @@
           <button id="btnOk" class="primary">知道了</button>
           <button id="btnCopy">复制</button>
         </footer>
+      </div>
+
+      <!-- 聊天视图：跟工作流平行，不进三张表 -->
+      <div id="chatWrap" class="chat-wrap" style="display:none">
+        <div class="chat-log" id="chatLog"></div>
+        <form id="chatForm" class="chat-form">
+          <input id="chatInput" class="chat-input" type="text" placeholder="跟人设说点什么…" autocomplete="off" />
+          <button type="submit" class="chat-send">发送</button>
+        </form>
       </div>
     </div>
 
