@@ -39,6 +39,8 @@ export class TuiClient {
   private sessionState: SessionState = "idle";
   private pendingInput?: string;
   private personaName = "指挥官";
+  private chatMode = false; // /chat 进入：跟工作流平行，不走 user_input
+  private chatPending = false;
   private pendingPermission?: { requestId: string; sessionId: string };
   private pendingAsk?: { requestId: string; sessionId: string; questions: AskQuestion[] };
 
@@ -314,12 +316,23 @@ export class TuiClient {
     if (!text) { this.renderBuffer(); return; }
     if (text.startsWith("/")) { this.handleCommand(text); return; }
 
-    if (text && !text.startsWith("/")) {
-      this.history.push(text);
-      // ponytail: cap history to prevent memory leak
-      if (this.history.length > 1000) this.history.shift();
-    }
+    this.history.push(text);
+    // ponytail: cap history to prevent memory leak
+    if (this.history.length > 1000) this.history.shift();
+
+    if (this.chatMode) { this.submitChat(text); return; }
     this.submitText(text);
+  }
+
+  private submitChat(text: string): void {
+    if (this.chatPending) {
+      this.println(`${C.dim}（上一句还没回来，等等）${C.reset}`);
+      return;
+    }
+    this.println(`${C.honey}你:${C.reset} ${text}`);
+    this.chatPending = true;
+    this.send({ type: "persona_chat", windowId: "_global", text });
+    this.renderBuffer();
   }
 
   // ── special modes (permission / ask) ───────────────────
@@ -368,12 +381,13 @@ export class TuiClient {
       process.stdout.write(`\x1b[${this.renderedLines}A\x1b[0J`);
     }
 
-    const tag = this.currentSession ? this.currentSession : "无会话";
-    const busy = this.sessionState !== "idle" && this.sessionState !== "closed";
-    const indicator = this.sessionState === "thinking" ? `${C.dim}…${C.reset}` :
+    const tag = this.chatMode ? this.personaName : (this.currentSession ? this.currentSession : "无会话");
+    const busy = this.chatMode ? this.chatPending : (this.sessionState !== "idle" && this.sessionState !== "closed");
+    const indicator = this.chatMode ? (this.chatPending ? `${C.dim}…${C.reset}` : "") :
+                      this.sessionState === "thinking" ? `${C.dim}…${C.reset}` :
                       this.sessionState === "waiting_permission" ? `${C.yellow}?${C.reset}` :
                       this.sessionState === "reporting" ? `${C.dim}…${C.reset}` : "";
-    const bracket = busy ? C.dim : C.cyan;
+    const bracket = busy ? C.dim : (this.chatMode ? C.magenta : C.cyan);
     const prefix = `${indicator}${bracket}[${tag}]${C.reset} > `;
     const pw = visLen(prefix);
     const indent = " ".repeat(pw);
@@ -469,7 +483,7 @@ export class TuiClient {
     this.println(`${C.magenta}${C.bold}majordomo · 指挥官 TUI${C.reset}`);
     this.println(
       `${C.dim}Ctrl+J/Shift+Enter 换行 | Enter 提交 | Ctrl+L 清屏 | Esc+Esc 清空 | Ctrl+Y 粘贴删除 | Ctrl+G 编辑器 | Ctrl+C 打断\n` +
-      `命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /help  /quit${C.reset}`
+      `命令：/new [名字]  /sessions  /resume <id>  /profile <名>  /chat  /help  /quit${C.reset}`
     );
   }
 
@@ -514,6 +528,14 @@ export class TuiClient {
         if (this.currentSession)
           this.send({ type: "slash", sessionId: this.currentSession, command: cmd, args: arg });
         else this.println(`${C.yellow}先开一个会话${C.reset}`);
+        break;
+      case "chat":
+        this.chatMode = !this.chatMode;
+        this.println(
+          this.chatMode
+            ? `${C.magenta}已切到跟 ${this.personaName} 聊天（跟工作流平行，/chat 退出）${C.reset}`
+            : `${C.dim}退出聊天，回到工作层输入${C.reset}`
+        );
         break;
       case "help":
         this.printBanner();
@@ -649,6 +671,12 @@ export class TuiClient {
         break;
       }
       case "persona_message":
+        this.println(`${C.magenta}${C.bold}${this.personaName}:${C.reset} ${renderMarkdown(msg.text)}`);
+        break;
+      case "persona_chat_reply":
+        if (msg.windowId !== "_global") break; // TUI 只挂全局聊天，跟具体窗口无关
+        if (msg.partial) break; // 流式中间帧不刷屏，等终稿一次性打印，跟工作层文本不同频
+        this.chatPending = false;
         this.println(`${C.magenta}${C.bold}${this.personaName}:${C.reset} ${renderMarkdown(msg.text)}`);
         break;
       case "permission_request":
