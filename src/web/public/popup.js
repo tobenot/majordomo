@@ -177,39 +177,10 @@
         }
         win.lastPersona = msg.text;
         win.lastThinking = "";
-        var isNewPersona = true;
         if (msg.personaMessages) win.personaMessages = msg.personaMessages;
         state.personaPending[msg.windowId] = false;
-
-        if (isNewPersona) {
-          state.unread[msg.windowId] = true;
-          if (state.suppressed) {
-            // 缩小态：只脉冲提示，不展开
-            pulse();
-            return;
-          }
-          if (state.mode === "chat") {
-            // 聊天中：别的窗口来消息不许把聊天顶掉，只脉冲提示
-            if (state.chatWindowId !== msg.windowId) pulse();
-            break;
-          }
-          if (state.mode === "detail" && state.current !== msg.windowId) {
-            pulse();
-            render();
-          } else if (state.mode === "list") {
-            showDetail(msg.windowId);
-            pulse();
-          } else if (state.mode !== "detail") {
-            showList();
-            pulse();
-          } else {
-            render();
-          }
-        } else if (state.mode === "detail" && state.current === msg.windowId) {
-          render();
-        } else if (state.mode === "list") {
-          render();
-        }
+        state.unread[msg.windowId] = true;
+        handleWindowEvent(msg.windowId, true);
         break;
       }
       case "window_persona_status":
@@ -218,25 +189,7 @@
           state.windows[msg.windowId].lastPersona = "";
           state.windows[msg.windowId].lastThinking = "";
         }
-        if (state.suppressed) {
-          // 缩小态不抢展开，只脉冲提示还在等人设
-          if (msg.phase === "start") pulse();
-          break;
-        }
-        if (msg.phase !== "start") {
-          render();
-          break;
-        }
-        // collapsed/list：展开详情露出「调用中」横幅（原先 collapsed 啥也不显）
-        if (state.mode === "collapsed" || state.mode === "list") {
-          showDetail(msg.windowId);
-          pulse();
-        } else if (state.current !== msg.windowId) {
-          pulse();
-          render();
-        } else {
-          render();
-        }
+        handleWindowEvent(msg.windowId, msg.phase === "start");
         break;
       case "persona_chat_reply": {
         var log = state.chatLogs[msg.windowId];
@@ -262,53 +215,12 @@
     var isNew = !prev;
     var becameWaiting = w.state === "waiting" && (!prev || prev.state !== "waiting");
     var hasNewPersona = w.lastPersona && (!prev || prev.lastPersona !== w.lastPersona);
+    var isSignificant = isNew || becameWaiting || hasNewPersona;
 
-    // 需要你介入 或 有新 persona → 标记未读
-    if (becameWaiting || hasNewPersona) {
-      state.unread[w.windowId] = true;
-    }
+    // 需要你介入 或 有新 persona → 标记未读（新窗口上线本身不算未读，等它真有事再标）
+    if (becameWaiting || hasNewPersona) state.unread[w.windowId] = true;
 
-    // 缩小态：只静默更新数据，不展开
-    if (state.suppressed) {
-      if (becameWaiting || hasNewPersona) pulse();
-      return;
-    }
-
-    // 新窗口上线 → 列表模式下自动展开
-    if (isNew && state.mode === "list") {
-      showDetail(w.windowId);
-      pulse();
-      return;
-    }
-
-    if (becameWaiting || hasNewPersona) {
-      // 不抢焦点：如果正在看别的窗口，只脉冲提示，不切走
-      if (state.mode === "detail" && state.current !== w.windowId) {
-        pulse(); // 轻脉冲提示有新东西
-        render(); // 更新头部 +N 标签
-        return;
-      }
-      if (state.mode === "chat") {
-        // 聊天中：别的窗口来消息不许把聊天顶掉，只脉冲提示
-        if (state.chatWindowId !== w.windowId) pulse();
-        return;
-      }
-      // 列表模式 → 自动展开新窗口详情；收起态 → 只展开列表
-      if (state.mode === "list") {
-        showDetail(w.windowId);
-        pulse();
-        return;
-      }
-      if (state.mode !== "detail") {
-        showList();
-        pulse();
-        return;
-      }
-    }
-
-    // 正在看的就是这个窗口 → 刷新详情
-    if (state.mode === "detail" && state.current === w.windowId) render();
-    else if (state.mode === "list") render();
+    handleWindowEvent(w.windowId, isSignificant);
   }
 
   // ── 模式切换 ────────────────────────────────────────────
@@ -342,6 +254,30 @@
 
   function hideChat() {
     state.mode = state.modeBeforeChat || "list";
+    render();
+  }
+
+  // 唯一的"某窗口来了新事件，浮窗要不要自动导航"决策入口。
+  // 之前这条判断在三处事件处理器里各抄一份，改的时候漏改是常态（这次 chat 模式被顶掉就是漏了两处）。
+  // isSignificant：够不够格从 list/collapsed 自动展开详情（新人设回复 / 变 waiting / 新窗口上线）。
+  function handleWindowEvent(windowId, isSignificant) {
+    if (state.suppressed) {
+      if (isSignificant) pulse();
+      return;
+    }
+    if (state.mode === "chat") {
+      // 聊天中永远不被顶走，只在跟聊天窗口不是同一个时提示一下
+      if (isSignificant && state.chatWindowId !== windowId) pulse();
+      return;
+    }
+    if (state.mode === "detail") {
+      if (state.current === windowId) { render(); return; }
+      if (isSignificant) pulse();
+      render(); // 更新 +N 未读角标
+      return;
+    }
+    // list / collapsed：collapsed 统一按 list 对待，够格的事件直接展开详情
+    if (isSignificant) { showDetail(windowId); pulse(); return; }
     render();
   }
 
