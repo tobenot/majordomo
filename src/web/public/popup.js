@@ -188,6 +188,11 @@
             pulse();
             return;
           }
+          if (state.mode === "chat") {
+            // 聊天中：别的窗口来消息不许把聊天顶掉，只脉冲提示
+            if (state.chatWindowId !== msg.windowId) pulse();
+            break;
+          }
           if (state.mode === "detail" && state.current !== msg.windowId) {
             pulse();
             render();
@@ -281,6 +286,11 @@
       if (state.mode === "detail" && state.current !== w.windowId) {
         pulse(); // 轻脉冲提示有新东西
         render(); // 更新头部 +N 标签
+        return;
+      }
+      if (state.mode === "chat") {
+        // 聊天中：别的窗口来消息不许把聊天顶掉，只脉冲提示
+        if (state.chatWindowId !== w.windowId) pulse();
         return;
       }
       // 列表模式 → 自动展开新窗口详情；收起态 → 只展开列表
