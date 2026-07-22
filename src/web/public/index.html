@@ -37,6 +37,7 @@
         <div id="detailHead" class="detail-head">
           <span id="detailTitle">选一个窗口看它在做什么</span>
           <span id="detailState" class="badge"></span>
+          <button id="btnChat" class="chat-toggle-btn" title="直接和人设聊聊">💬 聊天</button>
         </div>
         <div id="personaBox" class="persona-box">
           <div class="cg-ambient" id="cgAmbient"></div>
@@ -47,6 +48,15 @@
           <summary>原始事件 (<span id="actCount">0</span>)</summary>
           <div id="activity" class="activity"></div>
         </details>
+
+        <!-- 聊天视图：跟工作流平行，替换掉上面几块，不进三张表 -->
+        <div id="chatWrap" class="chat-wrap hidden">
+          <div class="chat-log" id="chatLog"></div>
+          <form id="chatForm" class="chat-form">
+            <input id="chatInput" class="chat-input" type="text" placeholder="跟人设说点什么…" autocomplete="off" />
+            <button type="submit" class="chat-send">发送</button>
+          </form>
+        </div>
       </section>
 
       <!-- ②③ 全局待办 + 待验收 -->

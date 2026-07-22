@@ -37,6 +37,9 @@
     personaName: "中枢",
     assetNames: [],
     personaPending: {}, // windowId -> true（人设层 API 调用中）
+    chatOpen: false,
+    chatLogs: {}, // windowId -> [{ role: 'user'|'persona', text, pending? }]，跟弹窗一致按窗口分桶
+    chatPending: false,
   };
 
   const STATE_LABEL = { working: "干活中", waiting: "等你", idle: "空闲", offline: "离线" };
@@ -105,6 +108,20 @@
         state.acceptance = msg.items || [];
         renderAcceptance();
         break;
+      case "persona_chat_reply": {
+        const log = state.chatLogs[msg.windowId];
+        if (!log) break; // 没发过消息给这个窗口，忽略（防御，理论不会发生）
+        const last = log[log.length - 1];
+        if (last && last.role === "persona" && last.pending) {
+          last.text = msg.text;
+          last.pending = !!msg.partial;
+        } else {
+          log.push({ role: "persona", text: msg.text, pending: !!msg.partial });
+        }
+        if (!msg.partial) state.chatPending = false;
+        if (state.chatOpen && chatWindowId() === msg.windowId) renderChat();
+        break;
+      }
       case "error":
         console.warn("中枢错误:", msg.message);
         break;
@@ -120,14 +137,14 @@
       if (!state.current) selectWindow(w.windowId);
     }
     renderWindows();
-    if (state.current === w.windowId) renderDetail();
+    if (state.current === w.windowId && !state.chatOpen) renderDetail();
   }
 
   function markOffline(id) {
     const w = state.windows.find((x) => x.windowId === id);
     if (w) w.state = "offline";
     renderWindows();
-    if (state.current === id) renderDetail();
+    if (state.current === id && !state.chatOpen) renderDetail();
   }
 
   function applyPersona(id, text, personaMessages) {
@@ -137,7 +154,7 @@
     w.lastThinking = "";
     if (personaMessages) w.personaMessages = personaMessages;
     state.personaPending[id] = false;
-    if (state.current === id) renderDetail();
+    if (state.current === id && !state.chatOpen) renderDetail();
     renderWindows();
   }
 
@@ -147,7 +164,7 @@
     if (thinking) {
       w.lastThinking = text;
       // 只改跑马灯文案，避免整页重渲打断滚动动画
-      if (state.current === id) {
+      if (state.current === id && !state.chatOpen) {
         var scroll = document.querySelector("#personaScroll .persona-pending-scroll");
         if (scroll) {
           var line = thinkingLine(text);
@@ -161,7 +178,7 @@
       w.lastThinking = ""; // 正文开始后收起思考
     }
     // 保持 pending；流式草稿挂在 lastPersona / lastThinking
-    if (state.current === id) renderDetail({ keepScroll: true });
+    if (state.current === id && !state.chatOpen) renderDetail({ keepScroll: true });
     renderWindows();
   }
 
@@ -175,7 +192,7 @@
       }
     }
     renderWindows();
-    if (state.current === id) renderDetail();
+    if (state.current === id && !state.chatOpen) renderDetail();
   }
 
   function sortedWindows() {
@@ -212,7 +229,8 @@
     state.current = id;
     state.assetName = pickRandom(state.assetNames) || state.personaName || "";
     renderWindows();
-    renderDetail();
+    if (state.chatOpen) renderChat();
+    else renderDetail();
     loadImages(id);
   }
 
@@ -252,6 +270,10 @@
   }
 
   function renderDetail(opts) {
+    el("chatWrap").classList.add("hidden");
+    el("personaBox").classList.remove("hidden");
+    el("metricsArea").classList.remove("hidden");
+    el("activityWrap").classList.remove("hidden");
     const w = state.windows.find((x) => x.windowId === state.current);
     const pScroll = el("personaScroll");
     const actWrap = el("activityWrap");
@@ -364,6 +386,56 @@
       actWrap.classList.add("hidden");
     }
   }
+
+  // ── 聊天视图：跟 detail 平行，独立渲染，不碰上面 renderDetail 的任何状态 ──
+  function chatWindowId() {
+    return state.current || "_global";
+  }
+
+  function toggleChat() {
+    state.chatOpen = !state.chatOpen;
+    if (state.chatOpen) renderChat();
+    else renderDetail();
+  }
+
+  function renderChat() {
+    el("personaBox").classList.add("hidden");
+    el("metricsArea").classList.add("hidden");
+    el("activityWrap").classList.add("hidden");
+    el("chatWrap").classList.remove("hidden");
+
+    const w = state.windows.find((x) => x.windowId === state.current);
+    el("detailTitle").textContent = w ? ("跟 " + state.personaName + " 聊 · " + w.title) : ("跟 " + state.personaName + " 聊聊");
+    el("detailState").textContent = "";
+    el("detailState").className = "badge";
+
+    const windowId = chatWindowId();
+    const log = state.chatLogs[windowId] || [];
+    el("chatLog").innerHTML = log.map((m) => {
+      const cls = m.role === "user" ? "chat-msg chat-user" : "chat-msg chat-persona";
+      const text = m.text ? replaceEmoji(window.MjMarkdown.render(m.text)) : "";
+      return '<div class="' + cls + '">' + text + (m.pending ? '<span class="chat-typing">…</span>' : "") + "</div>";
+    }).join("");
+    const logEl = el("chatLog");
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  el("btnChat").onclick = toggleChat;
+  el("chatForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (state.chatPending) return; // 上一句没回来前不让连发，避免后端历史被并发请求打乱
+    const input = el("chatInput");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    const windowId = chatWindowId();
+    const log = state.chatLogs[windowId] || (state.chatLogs[windowId] = []);
+    log.push({ role: "user", text });
+    log.push({ role: "persona", text: "", pending: true });
+    state.chatPending = true;
+    renderChat();
+    send({ type: "persona_chat", windowId, text });
+  });
 
   // ── ② 待办 ────────────────────────────────────────────
   function renderTodos() {
@@ -523,7 +595,8 @@
 
   function renderAll() {
     renderWindows();
-    renderDetail();
+    if (state.chatOpen) renderChat();
+    else renderDetail();
     loadImages();
     renderTodos();
     renderAcceptance();
