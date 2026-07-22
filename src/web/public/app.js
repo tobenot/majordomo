@@ -411,13 +411,15 @@
 
     const windowId = chatWindowId();
     const log = state.chatLogs[windowId] || [];
-    el("chatLog").innerHTML = log.map((m) => {
+    const logEl = el("chatLog");
+    const nearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+    logEl.innerHTML = log.map((m) => {
       const cls = m.role === "user" ? "chat-msg chat-user" : "chat-msg chat-persona";
       const text = m.text ? replaceEmoji(window.MjMarkdown.render(m.text)) : "";
       return '<div class="' + cls + '">' + text + (m.pending ? '<span class="chat-typing">…</span>' : "") + "</div>";
     }).join("");
-    const logEl = el("chatLog");
-    logEl.scrollTop = logEl.scrollHeight;
+    // 只有本来就在底部（正在跟着看）才自动跟到新消息，往上翻看历史时不打扰
+    if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
   }
 
   el("btnChat").onclick = toggleChat;

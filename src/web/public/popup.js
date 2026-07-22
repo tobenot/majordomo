@@ -597,12 +597,14 @@
 
     var messages = state.chatLogs[state.chatWindowId] || [];
     var logEl = el("chatLog");
+    var nearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
     logEl.innerHTML = messages.map(function (m) {
       var cls = m.role === "user" ? "chat-msg chat-user" : "chat-msg chat-persona";
       var text = m.text ? replaceEmoji(window.MjMarkdown.render(m.text)) : "";
       return '<div class="' + cls + '">' + text + (m.pending ? '<span class="chat-typing">…</span>' : "") + "</div>";
     }).join("");
-    logEl.scrollTop = logEl.scrollHeight;
+    // 只有本来就在底部才自动跟到新消息，往上翻看历史时不打扰
+    if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
   }
 
   function renderMore() {

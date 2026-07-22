@@ -27,7 +27,7 @@ html, body {
 }
 
 /* 允许复制回复内容 */
-.body, .acts-body { user-select: text; }
+.body, .acts-body, .chat-log { user-select: text; }
 
 /* Google Noto emoji replacement images */
 img.emoji-img {
